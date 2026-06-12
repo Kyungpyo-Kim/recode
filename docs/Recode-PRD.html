@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Recode PRD</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #121933;
+      --panel-2: #0f1530;
+      --text: #e8ecff;
+      --muted: #9fb0e0;
+      --line: #2a3564;
+      --accent: #7c9cff;
+      --accent-2: #62e0ff;
+      --good: #6ee7b7;
+      --warn: #fbbf24;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, "Noto Sans KR", "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, #0a0f1d 0%, #0d1430 100%);
+      color: var(--text);
+      line-height: 1.65;
+    }
+    .wrap {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+    }
+    .hero {
+      padding: 28px;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: radial-gradient(circle at top right, rgba(124,156,255,0.2), transparent 30%), linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+    }
+    .eyebrow {
+      display: inline-block;
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--accent-2);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    h1 {
+      font-size: 52px;
+      margin: 16px 0 8px;
+      letter-spacing: -0.03em;
+    }
+    .tagline {
+      font-size: 22px;
+      color: var(--accent-2);
+      margin: 0 0 12px;
+    }
+    .lede {
+      color: var(--muted);
+      font-size: 17px;
+      max-width: 900px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 20px;
+      margin-top: 24px;
+    }
+    .card {
+      background: rgba(18,25,51,0.92);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 22px;
+    }
+    h2 {
+      margin-top: 42px;
+      font-size: 28px;
+      letter-spacing: -0.02em;
+    }
+    h3 {
+      margin-top: 0;
+      font-size: 20px;
+    }
+    p, li { color: var(--text); }
+    .muted { color: var(--muted); }
+    ul { padding-left: 20px; }
+    li { margin: 6px 0; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 14px;
+      background: rgba(18,25,51,0.72);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+    th, td {
+      border-bottom: 1px solid var(--line);
+      padding: 14px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: rgba(255,255,255,0.04);
+      color: var(--accent-2);
+    }
+    .pill {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      color: var(--good);
+      font-size: 13px;
+    }
+    code {
+      background: rgba(255,255,255,0.06);
+      padding: 2px 6px;
+      border-radius: 6px;
+      color: #dce7ff;
+    }
+    .footer {
+      margin-top: 40px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    @media (max-width: 800px) {
+      h1 { font-size: 38px; }
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <div class="eyebrow">Product Requirements Document</div>
+      <h1>Recode</h1>
+      <p class="tagline"><strong>RE</strong> the run.</p>
+      <p class="lede">
+        Recode is a lightweight, standalone, cross-platform coding-agent runtime with dual surfaces: a human-first TUI and an automation-friendly CLI for OpenClaw. Its core value is not chat polish. It is visible, policy-driven execution built for <strong>re-plan, re-try, re-route, re-sume, and re-code</strong> with explicit retry, timeout, approval, and audit boundaries.
+      </p>
+    </section>
+
+    <h2>1. Overview</h2>
+    <div class="grid">
+      <div class="card">
+        <h3>Document Control</h3>
+        <ul>
+          <li><strong>Document:</strong> Recode PRD</li>
+          <li><strong>Status:</strong> Draft for internal review</li>
+          <li><strong>Version:</strong> v1.1</li>
+          <li><strong>Last Updated:</strong> 2026-06-12</li>
+          <li><strong>Owner:</strong> Kyungpyo</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Primary Stakeholders</h3>
+        <ul>
+          <li><strong>Product Owner:</strong> Kyungpyo</li>
+          <li><strong>Architecture / Tech Lead:</strong> TBD</li>
+          <li><strong>Implementation:</strong> Core runtime engineer(s), CLI/TUI engineer(s)</li>
+          <li><strong>QA:</strong> cross-platform and workflow validation owner TBD</li>
+          <li><strong>Design:</strong> terminal UX / operator experience owner TBD</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>Revision History</h3>
+    <table>
+      <thead>
+        <tr><th>Date</th><th>Editor</th><th>Change</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>2026-06-12</td><td>Varuna + Kyungpyo</td><td>Initial PRD draft created for Recode.</td></tr>
+        <tr><td>2026-06-12</td><td>Varuna + Kyungpyo</td><td>Added dynamic workflow orchestration, cron scheduling, OpenAI-compatible endpoint support, Codex API support, and RE-centered branding.</td></tr>
+        <tr><td>2026-06-12</td><td>Varuna</td><td>Reworked PRD against PM checklist, adding success metrics, priorities, user stories, edge cases, milestones, and release plan.</td></tr>
+      </tbody>
+    </table>
+
+    <h2>2. Background & Objectives</h2>
+    <p>
+      Build a coding runtime that feels sharp in the terminal, stays safe under enterprise expectations, ships as Linux and Windows binaries, and exposes a stable CLI contract so OpenClaw can call it directly during real coding workflows.
+    </p>
+
+    <h3>2.1 Philosophy: The Meaning of “RE”</h3>
+    <div class="card">
+      <p><strong>RE</strong> is the philosophy of disciplined return.</p>
+      <p>Good systems do not pretend they are always right on the first pass. They observe, adapt, recover, and continue. Recode is built on that belief.</p>
+      <ul>
+        <li><strong>Re-plan</strong> when reality invalidates the original path</li>
+        <li><strong>Re-try</strong> when failure is temporary but the objective remains valid</li>
+        <li><strong>Re-route</strong> when the workflow must take a different course</li>
+        <li><strong>Re-sume</strong> when interruption should not mean loss of progress</li>
+        <li><strong>Re-code</strong> when the implementation must evolve under evidence</li>
+      </ul>
+      <p class="muted">Recode is not named for repetition. It is named for resilience, revision, and controlled recovery. The runtime exists to make iteration explicit, governable, and trustworthy.</p>
+    </div>
+
+    <h3>2.2 Problem Statement</h3>
+    <div class="card">
+      <p class="muted">
+        Existing coding-agent tools are often strong at conversation but weak at execution control. In company environments, missing controls around retry, timeout, approvals, scheduling, and structured automation make them awkward or unsafe to use at scale.
+      </p>
+      <ul>
+        <li>Retry behavior is opaque or inflexible</li>
+        <li>Timeouts are too coarse or not operator-visible</li>
+        <li>Automation interfaces are unstable or absent</li>
+        <li>Cross-platform support breaks on shell and PTY assumptions</li>
+        <li>Security posture is weaker than what practical teams need</li>
+        <li>Dynamic replanning and workflow steering are not first-class</li>
+      </ul>
+    </div>
+
+    <h3>2.3 Product Objectives</h3>
+    <table>
+      <thead>
+        <tr><th>Objective</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Reliable execution control</td><td>Provide timeout and retry control at LLM, tool, step, and task boundaries.</td></tr>
+        <tr><td>Dual-surface runtime</td><td>Support both a human TUI and an OpenClaw-usable CLI on top of the same core runtime.</td></tr>
+        <tr><td>Cross-platform quality</td><td>Ship Linux and Windows release binaries without POSIX-centric design traps.</td></tr>
+        <tr><td>Safe by default</td><td>Match the security class of OpenCode and Claude Code with approval boundaries and auditable execution.</td></tr>
+        <tr><td>Composable workflows</td><td>Support skill-based orchestration without turning the runtime into plugin chaos.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>2.4 Target Audience</h3>
+    <div class="grid">
+      <div class="card">
+        <h3>Primary User</h3>
+        <p><strong>Operator-developer</strong> who wants a fast local coding agent with visible execution control, strong auditability, and cross-platform behavior.</p>
+        <p class="muted">Typical needs: inspect state, steer workflow, retry safely, schedule recurring runs, and maintain trust in local execution.</p>
+      </div>
+      <div class="card">
+        <h3>Secondary User</h3>
+        <p><strong>OpenClaw runtime</strong> invoking Recode as a stable CLI tool during coding and automation tasks.</p>
+        <p class="muted">Typical needs: explicit subcommands, JSON output, deterministic approval semantics, and reusable workflow policies.</p>
+      </div>
+    </div>
+
+    <h2>3. Success Metrics</h2>
+    <h3>3.1 Primary KPIs / Satisfaction Criteria</h3>
+    <table>
+      <thead>
+        <tr><th>Metric</th><th>Target for MVP</th><th>Why it matters</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Linux release readiness</td><td>1 signed or releasable Linux binary built successfully from CI or repeatable local release flow</td><td>Confirms the runtime is actually distributable.</td></tr>
+        <tr><td>Windows release readiness</td><td>1 signed or releasable Windows binary built successfully from CI or repeatable local release flow</td><td>Prevents fake cross-platform claims.</td></tr>
+        <tr><td>CLI automation coverage</td><td>100% of core flows available through CLI without TUI scraping</td><td>OpenClaw integration depends on it.</td></tr>
+        <tr><td>Timeout policy coverage</td><td>LLM, tool, step, and task boundaries all support configurable timeout controls</td><td>This is core product value.</td></tr>
+        <tr><td>Retry policy coverage</td><td>Retry count, backoff, resume, and manual retry available for core execution flows</td><td>Enterprise usability depends on it.</td></tr>
+        <tr><td>Workflow recovery correctness</td><td>Resume and branch transitions pass defined acceptance scenarios with no state corruption</td><td>Recode lives or dies on controlled iteration.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>3.2 Guardrail Metrics</h3>
+    <table>
+      <thead>
+        <tr><th>Guardrail</th><th>Constraint</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Security regressions</td><td>No default execution path may bypass approval policy for destructive actions.</td></tr>
+        <tr><td>State loss</td><td>Unexpected crashes must not silently discard persisted session or scheduled-run state.</td></tr>
+        <tr><td>Performance regression</td><td>Operator-facing CLI commands should return initial structured status within 2 seconds for normal local-state queries.</td></tr>
+        <tr><td>Cross-platform drift</td><td>Features marked as supported must work on both Linux and Windows or be clearly blocked.</td></tr>
+      </tbody>
+    </table>
+
+    <h2>4. Scope & Priorities</h2>
+    <h3>4.1 MoSCoW Prioritization</h3>
+    <table>
+      <thead>
+        <tr><th>Priority</th><th>Items</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Must-Have</td><td>Rust core runtime, TUI + CLI surfaces, session/task/step/attempt model, dynamic workflow orchestration, timeout/retry controls, declarative skills, OpenAI-compatible endpoints, Codex API support, tool approvals, cron/delayed scheduling, Linux/Windows release binaries, auditable logs.</td></tr>
+        <tr><td>Should-Have</td><td>Workflow templates per skill, richer operator steering commands, import/export of workflow state, release automation CI, structured failure taxonomy.</td></tr>
+        <tr><td>Could-Have</td><td>Richer terminal visualizations, skill marketplace packaging, local analytics dashboard, replay viewer.</td></tr>
+        <tr><td>Won’t-Have (MVP)</td><td>Web UI, cloud control plane, distributed workers, arbitrary plugin SDK, complex memory engine.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>4.2 Non-Goals</h3>
+    <ul>
+      <li>GUI or web UI in MVP</li>
+      <li>Complex long-term memory system in MVP</li>
+      <li>Distributed worker cluster in MVP</li>
+      <li>Open plugin API that allows arbitrary runtime mutation</li>
+      <li>tmux-dependent or shell-specific architecture</li>
+    </ul>
+
+    <h2>5. User Stories</h2>
+    <table>
+      <thead>
+        <tr><th>User</th><th>User Story</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Operator-developer</td><td>As a user, I can run a coding workflow with visible retries and timeouts so I can trust and steer execution.</td></tr>
+        <tr><td>Operator-developer</td><td>As a user, I can pause, redirect, retry, or resume a workflow so failure does not force me to restart from scratch.</td></tr>
+        <tr><td>Operator-developer</td><td>As a user, I can schedule one-shot or recurring workflow runs so routine coding and verification tasks happen automatically.</td></tr>
+        <tr><td>OpenClaw</td><td>As OpenClaw, I can invoke Recode through CLI commands with JSON output so I can use it as a dependable coding tool.</td></tr>
+        <tr><td>Security-conscious operator</td><td>As a user, I can require approvals for risky actions so the runtime stays safe by default.</td></tr>
+      </tbody>
+    </table>
+
+    <h2>6. Functional Requirements</h2>
+    <table>
+      <thead>
+        <tr><th>Area</th><th>Requirement</th><th>Notes / Spec</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Session management</td><td>Create, resume, inspect, and persist sessions locally.</td><td>States include active, paused, blocked, completed, failed, canceled.</td></tr>
+        <tr><td>Workflow execution</td><td>Run tasks as steps with attempt-level policies.</td><td>Each step must record status, start/end time, timeout, retries, and output summary.</td></tr>
+        <tr><td>Dynamic workflow orchestration</td><td>Support branching, replanning, conditional next-step selection, interruption, resume, and operator-guided redirection during execution.</td><td>Branch transitions must be explicit in state and logs.</td></tr>
+        <tr><td>Cron and scheduling</td><td>Support one-shot, delayed, recurring, and cron-expression-based execution for workflows, skills, and maintenance tasks.</td><td>Scheduled jobs must persist across restarts.</td></tr>
+        <tr><td>Timeout model</td><td>Support LLM timeout, tool timeout, step timeout, and whole-task timeout.</td><td>Timeout values must be configurable per profile and per run.</td></tr>
+        <tr><td>Retry model</td><td>Support retry count, retry policy, backoff, manual retry, and resume behavior.</td><td>At minimum: none, fixed retry, exponential backoff, manual retry.</td></tr>
+        <tr><td>Tool execution</td><td>Run local tools with policy enforcement, logging, and approval gates.</td><td>Destructive tools require approval-capable policy paths.</td></tr>
+        <tr><td>LLM provider support</td><td>Support OpenAI-standardized API endpoints and Codex API compatibility through a provider abstraction layer.</td><td>Provider switching must not change approval or audit semantics.</td></tr>
+        <tr><td>Skill system</td><td>Load declarative skills with optional limited hooks.</td><td>Hook execution must remain policy-constrained.</td></tr>
+        <tr><td>TUI surface</td><td>Display sessions, task status, attempts, logs, approvals, current context, and live workflow state.</td><td>Loading, empty, blocked, approval-needed, failed, and complete states must all be visible.</td></tr>
+        <tr><td>CLI surface</td><td>Expose automation-friendly subcommands with JSON output mode.</td><td>Human-readable output is optional, JSON is mandatory for core flows.</td></tr>
+        <tr><td>Auditability</td><td>Persist execution logs, policy decisions, approvals, workflow transitions, and failure reasons.</td><td>Logs must support post-failure reconstruction of what happened.</td></tr>
+      </tbody>
+    </table>
+
+    <h2>7. Workflow Orchestration Requirements</h2>
+    <div class="card">
+      <p>
+        Recode must provide <strong>dynamic workflow control</strong> comparable in class to Claude Code's flexible coding flow, but with more explicit operator visibility and policy control.
+      </p>
+      <ul>
+        <li><strong>Dynamic replanning:</strong> revise execution path when tool output, tests, or new context changes the situation.</li>
+        <li><strong>Conditional branching:</strong> next steps may depend on outputs, validation results, approval outcomes, or policy checks.</li>
+        <li><strong>Operator intervention:</strong> users can pause, redirect, skip, retry, or force a branch without corrupting session state.</li>
+        <li><strong>Approval-aware flow:</strong> risky actions create explicit approval nodes rather than ad-hoc prompts.</li>
+        <li><strong>Checkpoint and resume:</strong> workflow state resumes from the last stable checkpoint after interruption or failure.</li>
+        <li><strong>Skill-driven orchestration:</strong> skills define workflow templates, step types, and policy defaults without arbitrary runtime mutation.</li>
+        <li><strong>Scheduled execution:</strong> workflows can launch immediately, later, on intervals, or through cron expressions.</li>
+        <li><strong>Structured outcome routing:</strong> success, failure, timeout, refusal, or cancellation each map to explicit next-state behavior.</li>
+      </ul>
+    </div>
+
+    <h3>7.1 Workflow Control Capabilities</h3>
+    <table>
+      <thead>
+        <tr><th>Capability</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Plan → Execute → Verify loops</td><td>Verification may trigger replan, branch selection, or targeted retry.</td></tr>
+        <tr><td>Dynamic next-step selection</td><td>The runtime decides or requests operator input based on live state, not fixed linear scripts only.</td></tr>
+        <tr><td>Subgoal tracking</td><td>Tasks may be decomposed into subgoals with explicit completion, blocked, abandoned, or superseded states.</td></tr>
+        <tr><td>Interrupt handling</td><td>Cancellation, timeout, approval denial, or tool failure must transition the workflow into well-defined states.</td></tr>
+        <tr><td>Manual steering</td><td>Operators and OpenClaw can inject guidance, constraints, or step overrides into an active workflow.</td></tr>
+        <tr><td>Scheduled runs</td><td>Users and OpenClaw can register delayed, interval, and cron-based runs with preserved policy and workflow context.</td></tr>
+        <tr><td>Workflow visibility</td><td>TUI and CLI both expose current node, pending branches, blocked state, scheduled runs, and recent transition history.</td></tr>
+      </tbody>
+    </table>
+
+    <h2>8. OpenClaw Integration Requirements</h2>
+    <p>Recode must be directly usable by OpenClaw during coding tasks.</p>
+
+    <h3>8.1 LLM API Compatibility</h3>
+    <table>
+      <thead>
+        <tr><th>Requirement</th><th>Details</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>OpenAI-compatible endpoints</td><td>Support API endpoints standardized by OpenAI so compatible providers can be used without runtime rewrites.</td></tr>
+        <tr><td>Codex API support</td><td>Explicitly support Codex-style coding API usage patterns as a first-class provider mode.</td></tr>
+        <tr><td>Provider abstraction</td><td>LLM integration must be isolated behind a provider interface so compatible backends can be swapped cleanly.</td></tr>
+        <tr><td>Policy continuity</td><td>Timeout, retry, approval, logging, and audit behavior must remain consistent regardless of active endpoint.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>8.2 CLI Contract</h3>
+    <table>
+      <thead>
+        <tr><th>Requirement</th><th>Details</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Stable CLI contract</td><td>Subcommands must be explicit, versionable, and documented.</td></tr>
+        <tr><td>Structured output</td><td>JSON output mode is mandatory.</td></tr>
+        <tr><td>No TUI scraping</td><td>CLI calls must go directly to runtime core.</td></tr>
+        <tr><td>Automation semantics</td><td>Exit codes, approvals, retry outcomes, error classes, and scheduled-run states must be consistent.</td></tr>
+        <tr><td>Cron control</td><td>OpenClaw must be able to create, inspect, trigger, pause, resume, and remove scheduled runs through CLI commands.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>8.3 Illustrative CLI Shape</h3>
+    <ul>
+      <li><code>recode run --task "..." --json</code></li>
+      <li><code>recode resume --session &lt;id&gt; --json</code></li>
+      <li><code>recode sessions list --json</code></li>
+      <li><code>recode skills list --json</code></li>
+      <li><code>recode exec-step --session &lt;id&gt; --step tool:test --json</code></li>
+      <li><code>recode cron add --schedule "0 8 * * 1-5" --task "daily verify check" --json</code></li>
+      <li><code>recode cron list --json</code></li>
+      <li><code>recode cron run --job &lt;id&gt; --json</code></li>
+    </ul>
+
+    <h2>9. Non-Functional Requirements</h2>
+    <h3>9.1 Performance & Reliability</h3>
+    <ul>
+      <li>Initial structured response for routine CLI state queries should return within 2 seconds on a normal local environment.</li>
+      <li>Scheduled jobs and session state must survive process restarts through persistent local state.</li>
+      <li>Crash recovery must preserve enough state to resume or inspect the last stable checkpoint.</li>
+    </ul>
+
+    <h3>9.2 Platform Support</h3>
+    <ul>
+      <li>Ship release binaries for Linux and Windows.</li>
+      <li>No dependency on tmux.</li>
+      <li>No dependency on bash or POSIX-only semantics.</li>
+      <li>Process, PTY, shell, and cancellation behavior must be abstracted.</li>
+      <li>Windows behavior must be first-class, not “best effort later.”</li>
+    </ul>
+
+    <h3>9.3 Security & Data Handling</h3>
+    <div class="card">
+      <p>Security target: comparable class to <strong>OpenCode</strong> and <strong>Claude Code</strong>.</p>
+      <ul>
+        <li>Default-safe local execution posture</li>
+        <li>Explicit approval gates for risky or destructive actions</li>
+        <li>Tool allowlists and constrained invocation policy</li>
+        <li>Clear separation between trusted instructions and external content</li>
+        <li>Auditable logs for tool use, approvals, retries, scheduled runs, and failures</li>
+        <li>No hidden autonomous background behavior outside declared workflow</li>
+      </ul>
+    </div>
+
+    <h2>10. User Flow & Edge Cases</h2>
+    <h3>10.1 Core User Flow</h3>
+    <ol>
+      <li>User or OpenClaw starts a task or scheduled run.</li>
+      <li>Runtime creates or resumes a session and loads policy + skill context.</li>
+      <li>Workflow plans initial subgoals and selects the first executable step.</li>
+      <li>Step executes through LLM/tool/approval path with timeout and retry policy.</li>
+      <li>Runtime evaluates result, then continues, replans, blocks for approval, or fails visibly.</li>
+      <li>User or OpenClaw inspects state, steers if needed, and resumes until completion or explicit stop.</li>
+    </ol>
+
+    <h3>10.2 Key Edge Cases</h3>
+    <table>
+      <thead>
+        <tr><th>Scenario</th><th>Expected Handling</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>LLM timeout</td><td>Mark attempt timed out, apply retry policy, log cause, and expose state to TUI/CLI.</td></tr>
+        <tr><td>Tool exits non-zero</td><td>Record failure class, allow retry/replan/manual steer based on policy.</td></tr>
+        <tr><td>Approval denied</td><td>Transition to blocked or refused state, never silently continue.</td></tr>
+        <tr><td>Empty state</td><td>TUI/CLI must show explicit no sessions / no jobs / no history states, not blank screens.</td></tr>
+        <tr><td>Invalid input</td><td>Return structured validation errors with clear field-level reason where applicable.</td></tr>
+        <tr><td>Process restart during scheduled wait</td><td>Restore scheduled jobs from persistent state on next startup.</td></tr>
+        <tr><td>User cancel / back out</td><td>Move workflow to canceled or paused state without corrupting session history.</td></tr>
+      </tbody>
+    </table>
+
+    <h2>11. Architecture Direction</h2>
+    <div class="card">
+      <p><span class="pill">Recommended</span></p>
+      <ul>
+        <li><strong>Language:</strong> Rust</li>
+        <li><strong>TUI:</strong> Ratatui</li>
+        <li><strong>Async runtime:</strong> Tokio</li>
+        <li><strong>Execution model:</strong> Session actor + Task graph + Step runner + Attempt policy</li>
+        <li><strong>Workflow control:</strong> dynamic branching, replanning, approval nodes, checkpoint/resume</li>
+        <li><strong>LLM integration:</strong> provider abstraction with OpenAI-compatible endpoint support and Codex API support</li>
+        <li><strong>Skill model:</strong> Declarative-first + limited hooks</li>
+        <li><strong>Scheduler:</strong> built-in cron and delayed-run subsystem over the shared runtime core</li>
+        <li><strong>Surfaces:</strong> TUI frontend + CLI frontend over shared core</li>
+      </ul>
+    </div>
+
+    <h2>12. Release Scope</h2>
+    <h3>12.1 MVP In / Out</h3>
+    <table>
+      <thead>
+        <tr><th>Include</th><th>Exclude</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <ul>
+              <li>Single runtime core</li>
+              <li>TUI + CLI surfaces</li>
+              <li>Session/task/step/attempt model</li>
+              <li>Dynamic workflow orchestration with branching and resume</li>
+              <li>Timeout and retry controls</li>
+              <li>Declarative skills</li>
+              <li>LLM provider abstraction</li>
+              <li>OpenAI-compatible endpoint support</li>
+              <li>Codex API support</li>
+              <li>Tool execution with approval gates</li>
+              <li>Built-in cron/delayed scheduling</li>
+              <li>Linux/Windows release binaries</li>
+            </ul>
+          </td>
+          <td>
+            <ul>
+              <li>Web UI</li>
+              <li>Complex memory engine</li>
+              <li>Multi-agent distributed orchestration</li>
+              <li>Arbitrary plugin SDK</li>
+              <li>Cloud control plane</li>
+            </ul>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>12.2 Release Strategy</h3>
+    <ul>
+      <li>Phase 1: internal developer build for Linux</li>
+      <li>Phase 2: internal developer build for Windows</li>
+      <li>Phase 3: unified review with TUI, CLI, scheduling, and approval workflows</li>
+      <li>Phase 4: gated release binaries with documented install and usage flow</li>
+      <li>Use feature flags or config gates for unstable provider or workflow features where needed</li>
+    </ul>
+
+    <h2>13. Timeline & Milestones</h2>
+    <table>
+      <thead>
+        <tr><th>Milestone</th><th>Definition</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>M1. PRD sign-off</td><td>Core scope, priorities, and security posture approved.</td></tr>
+        <tr><td>M2. Runtime skeleton</td><td>Core session/task/step model, provider abstraction, and CLI skeleton implemented.</td></tr>
+        <tr><td>M3. Workflow control</td><td>Branching, retry, timeout, and approval-state transitions working.</td></tr>
+        <tr><td>M4. Scheduling</td><td>Cron/delayed jobs persist and execute correctly across restarts.</td></tr>
+        <tr><td>M5. TUI integration</td><td>TUI exposes live workflow, logs, approvals, and scheduled runs.</td></tr>
+        <tr><td>M6. Cross-platform release</td><td>Linux and Windows release binaries built and validated.</td></tr>
+        <tr><td>M7. QA and hardening</td><td>Edge cases, audit behavior, approval boundaries, and provider compatibility reviewed.</td></tr>
+      </tbody>
+    </table>
+
+    <h2>14. Success Criteria</h2>
+    <ul>
+      <li>Linux and Windows release binaries produced successfully</li>
+      <li>OpenClaw can invoke Recode via CLI without scraping TUI output</li>
+      <li>OpenAI-compatible endpoints and Codex API can be configured and used through the same provider abstraction</li>
+      <li>Cron and delayed runs can be created, listed, triggered, and audited from the CLI</li>
+      <li>Timeout control works at LLM, tool, step, and whole-task levels</li>
+      <li>Retry policy is operator-visible and auditable</li>
+      <li>Workflow branching, replanning, interruption, and resume behave consistently across TUI and CLI</li>
+      <li>Risky actions respect approval boundaries</li>
+      <li>Declarative skills load and execute consistently across both surfaces</li>
+    </ul>
+
+    <div class="footer">
+      Recode PRD, generated for Kyungpyo. Version: Draft v1.1. This document is intended to act as the single source of truth for product, design, development, and QA alignment.
+    </div>
+  </div>
+</body>
+</html>

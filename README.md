@@ -30,6 +30,7 @@ Recode exists to make that loop explicit, governable, and trustworthy.
 
 ## Initial document set
 
+- [PRD HTML](docs/Recode-PRD.html)
 - [English PRD](docs/PRD.en.md)
 - [한국어 PRD](docs/PRD.ko.md)
 
