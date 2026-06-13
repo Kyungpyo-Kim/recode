@@ -59,6 +59,11 @@ Implementation choice:
 
 ## Follow-up
 
-1. Add task and execution defaults to config when the engine surface expands
+Completed since this ADR:
+1. Added `default_max_attempts` alongside timeout/provider defaults
+2. Wired the shared CLI/TUI surfaces through the same config loader path
+
+Still open:
+1. Add richer task/execution defaults as the step spec model expands
 2. Add provider-specific nested config once provider abstraction lands
 3. Consider profiles and workspace/user layering only after the base model proves stable

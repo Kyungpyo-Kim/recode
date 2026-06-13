@@ -36,8 +36,8 @@ The repo now has the first working MVP foundation:
 - Shared `ExecutorBridge` used by both CLI and TUI
 - Real timeout enforcement for shell-backed steps
 - Shared execution options for streaming, PTY preference, and file-based cancellation
-- CLI support for session creation, task creation, approval-gated step creation, controlled next-step execution, targeted task execution, step approval, and session-wide run-all
-- TUI support for session browsing plus `run-next`, `run-all`, and `approve` actions
+- CLI support for session creation, task creation, approval-gated step creation, controlled next-step execution, targeted task execution, step approval, session-wide run-all, run listing/inspection/reconcile/cancel, and background execution
+- TUI support for session browsing, task/step cursoring, selected-step approval, background execution, reconcile flow, selected-step log tail, selected status banner, and selected-run cancel requests
 - ADR-based architecture decision records for engine, config, and policy foundation
 - GitHub Actions CI for fmt, clippy, tests, and Linux/Windows build checks
 - Tag-based release workflow for binary artifacts
@@ -67,6 +67,7 @@ The current engine uses a persisted aggregate model:
 - each session owns `TaskRecord`s
 - each task owns ordered `StepRecord`s
 - each step keeps append-only `AttemptRecord`s
+- each executed attempt can now point at a persisted `RunRecord` with pid/log-path metadata
 
 The engine currently supports:
 
@@ -90,6 +91,9 @@ Current behavior:
 - `--stream` inherits stdio for live command output in the CLI path
 - `--pty` prefers a PTY-backed launch on Unix and falls back to the normal shell bridge if PTY launch is unavailable
 - `--cancel-file <path>` cancels a running shell command once that file appears and records the attempt as `cancelled`
+- `--background` launches a shell-backed step without blocking the caller and records the attempt/run as `running`
+- executed steps now persist a `RunRecord` under `.recode/state/runs` and write stdout/stderr log files under `.recode/state/logs`
+- the core store also reserves cancel request files under `.recode/state/cancels`
 - non-prefixed steps are treated as explicit operator/no-op steps and succeed with a summary
 - approval gates still stop execution before step run
 
@@ -105,7 +109,24 @@ cargo run -p recode-cli -- task run-next --session-id <session_uuid>
 cargo run -p recode-cli -- task run-next --session-id <session_uuid> --stream
 cargo run -p recode-cli -- task run-next --session-id <session_uuid> --stream --pty
 cargo run -p recode-cli -- task run-next --session-id <session_uuid> --cancel-file /tmp/recode.cancel
+cargo run -p recode-cli -- task run-next --session-id <session_uuid> --background
+cargo run -p recode-cli -- run list
+cargo run -p recode-cli -- run inspect --id <run_uuid>
+cargo run -p recode-cli -- run reconcile --id <run_uuid>
+cargo run -p recode-cli -- run cancel --id <run_uuid>
 ```
+
+Background lifecycle foundation now supports:
+- launch a step into `running`
+- persist stdout/stderr log paths plus an exit-code file path
+- reconcile a finished background run back into attempt/task/session state
+- trigger reconcile from CLI (`run reconcile`) or from TUI refresh (`r`)
+
+Current `run cancel` is a lifecycle foundation, not full async process control yet:
+- it writes a persisted cancel request file for the run
+- it aligns with the existing file-based cancellation path
+- TUI `x` now issues the same cancel request for the selected running run
+- full in-flight operator control still needs a later async runtime slice
 
 Manual injection mode still exists for testing:
 - `--outcome success|failed|timeout|cancelled`
@@ -115,22 +136,28 @@ If `--outcome` is omitted, CLI uses the shared `ExecutorBridge`.
 
 ### TUI parity slice
 
-The first real TUI now supports both visibility and basic actions.
-It still runs through the same shared bridge, but this slice keeps live streaming and explicit cancellation controls CLI-first so the TUI does not fight its alternate-screen lifecycle yet.
+The current TUI now supports both visibility and operator steering on top of the shared bridge.
+It still avoids true live streaming and hard in-flight process control inside the alternate screen, but it now covers the main MVP operator loop for selection, execution, approval, background reconcile, output inspection, and cancel-request flow.
 
 Shown on screen:
 - session list panel
+- selected session/task/step/run status banner
 - selected session detail panel
+- selected step stdout/stderr log tail panel
 - task / step / attempt summary
 - retry / timeout / approval policy summary
 - approval-required and approval-granted step state
 
 Keybindings:
-- `↑` / `↓` or `j` / `k`: move selection
-- `r`: refresh from disk
+- `↑` / `↓` or `j` / `k`: move session selection
+- `←` / `→` or `h` / `l`: move task selection inside the selected session
+- `u` / `d`: move step selection inside the selected task
+- `r`: reconcile finished background runs, then refresh from disk
 - `n`: run next step on selected session
+- `b`: run next step in background on selected session
 - `A`: run all remaining runnable steps on selected session
-- `a`: approve the first waiting approval step in selected session
+- `a`: approve the selected waiting step
+- `x`: request cancel for the selected running run
 - `q`: quit
 
 For non-interactive checks:
@@ -187,7 +214,7 @@ cargo test --workspace
 ## Next steps
 
 - deepen PTY support beyond the current Unix `script` fallback and add richer streaming capture for TUI/log panes
-- add true asynchronous cancellation controls inside the TUI instead of CLI-first file signalling
-- add task/step cursoring instead of first waiting-step approval only
+- add true async runtime/process control so TUI cancel is not only request + reconcile
+- replace title-prefix routing with an explicit step action/spec model
 - add backoff and richer retry policy types
 - build approval policy `on_failure` into real differentiated behavior

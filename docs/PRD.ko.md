@@ -2,8 +2,10 @@
 
 - **상태:** 내부 검토용 초안
 - **버전:** v1.1
-- **최종 수정일:** 2026-06-12
+- **최종 수정일:** 2026-06-13
 - **오너:** Kyungpyo
+
+> 구현 메모, 2026-06-13: 현재 저장소는 Rust workspace, persisted session/task/step/attempt 모델, 공유 CLI/TUI executor 경로, timeout enforcement, background run record, reconcile 흐름, task/step cursoring, TUI log tail, status banner, selected-run cancel request 흐름까지 포함한다. 내장 scheduler, 명시적 step spec 모델, richer retry/backoff, real async process control은 다음 마일스톤이다.
 
 ## 1. 개요
 

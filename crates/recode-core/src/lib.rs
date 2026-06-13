@@ -10,7 +10,8 @@ pub use engine::{
 };
 pub use executor::{ExecutorBridge, ExecutorOptions};
 pub use model::{
-    ApprovalPolicy, AttemptRecord, AttemptStatus, ExecutionPolicy, RetryPolicy, SessionRecord,
-    SessionStatus, StepRecord, StepStatus, TaskRecord, TaskStatus, TimeoutPolicy,
+    ApprovalPolicy, AttemptRecord, AttemptStatus, ExecutionPolicy, RetryPolicy, RunMode, RunRecord,
+    RunStatus, SessionRecord, SessionStatus, StepRecord, StepStatus, TaskRecord, TaskStatus,
+    TimeoutPolicy,
 };
 pub use storage::{DEFAULT_STATE_DIR, SessionStore};

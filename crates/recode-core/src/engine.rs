@@ -4,8 +4,8 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::model::{
-    ApprovalPolicy, AttemptRecord, AttemptStatus, SessionRecord, SessionStatus, StepRecord,
-    StepStatus, TaskRecord, TaskStatus,
+    ApprovalPolicy, AttemptRecord, AttemptStatus, RunMode, RunRecord, SessionRecord, SessionStatus,
+    StepRecord, StepStatus, TaskRecord, TaskStatus,
 };
 use crate::storage::SessionStore;
 
@@ -13,6 +13,7 @@ use crate::storage::SessionStore;
 pub struct AttemptOutcome {
     pub status: AttemptStatus,
     pub summary: Option<String>,
+    pub pid: Option<u32>,
 }
 
 impl AttemptOutcome {
@@ -20,6 +21,7 @@ impl AttemptOutcome {
         Self {
             status: AttemptStatus::Succeeded,
             summary: Some(summary.into()),
+            pid: None,
         }
     }
 
@@ -27,6 +29,7 @@ impl AttemptOutcome {
         Self {
             status: AttemptStatus::Failed,
             summary: Some(summary.into()),
+            pid: None,
         }
     }
 
@@ -34,6 +37,7 @@ impl AttemptOutcome {
         Self {
             status: AttemptStatus::TimedOut,
             summary: Some(summary.into()),
+            pid: None,
         }
     }
 }
@@ -61,13 +65,25 @@ impl StepSpec {
 }
 
 pub trait StepRunner {
+    fn run_mode(&self) -> RunMode {
+        RunMode::Foreground
+    }
+
     fn run_step(
         &mut self,
         session: &SessionRecord,
         task: &TaskRecord,
         step: &StepRecord,
+        run: &RunRecord,
         attempt_number: u32,
     ) -> AttemptOutcome;
+}
+
+impl AttemptOutcome {
+    pub fn with_pid(mut self, pid: u32) -> Self {
+        self.pid = Some(pid);
+        self
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -83,6 +99,10 @@ pub struct RunStepResult {
     pub task_id: Uuid,
     pub step_id: Uuid,
     pub step_title: String,
+    pub run_id: Option<Uuid>,
+    pub run_pid: Option<u32>,
+    pub stdout_log_path: Option<String>,
+    pub stderr_log_path: Option<String>,
     pub disposition: RunStepDisposition,
     pub attempt_number: Option<u32>,
     pub attempt_status: Option<AttemptStatus>,
@@ -284,6 +304,10 @@ impl WorkflowEngine {
                 task_id,
                 step_id,
                 step_title,
+                run_id: None,
+                run_pid: None,
+                stdout_log_path: None,
+                stderr_log_path: None,
                 disposition: RunStepDisposition::WaitingApproval,
                 attempt_number: None,
                 attempt_status: None,
@@ -294,9 +318,34 @@ impl WorkflowEngine {
 
         let attempt_number = step_snapshot.attempts.len() as u32 + 1;
         let max_attempts = session.policy.retry.max_attempts.max(1);
-        let outcome = runner.run_step(&session, &task_snapshot, &step_snapshot, attempt_number);
+        let mut run = RunRecord::new(
+            session.id,
+            task_snapshot.id,
+            step_snapshot.id,
+            attempt_number,
+            runner.run_mode(),
+        );
+        run.stdout_log_path = Some(self.store.stdout_log_path(run.id).display().to_string());
+        run.stderr_log_path = Some(self.store.stderr_log_path(run.id).display().to_string());
+        run.exit_code_path = Some(self.store.exit_code_path(run.id).display().to_string());
+        self.store.save_run(&run)?;
+        let outcome = runner.run_step(
+            &session,
+            &task_snapshot,
+            &step_snapshot,
+            &run,
+            attempt_number,
+        );
         let now = Utc::now();
         let retryable = is_retryable(outcome.status, attempt_number, max_attempts);
+        run.status = outcome.status.into();
+        run.finished_at = match outcome.status {
+            AttemptStatus::Running => None,
+            _ => Some(now),
+        };
+        run.pid = outcome.pid;
+        run.summary = outcome.summary.clone();
+        self.store.save_run(&run)?;
 
         let task_failed;
         {
@@ -308,10 +357,11 @@ impl WorkflowEngine {
             step.status = StepStatus::Running;
             let attempt = AttemptRecord {
                 id: Uuid::new_v4(),
+                run_id: Some(run.id),
                 number: attempt_number,
                 status: outcome.status,
-                started_at: now,
-                finished_at: Some(now),
+                started_at: run.started_at,
+                finished_at: run.finished_at,
                 summary: outcome.summary,
             };
             step.attempts.push(attempt);
@@ -362,12 +412,165 @@ impl WorkflowEngine {
             task_id: task_snapshot.id,
             step_id: step_snapshot.id,
             step_title: step_snapshot.title,
+            run_id: Some(run.id),
+            run_pid: run.pid,
+            stdout_log_path: run.stdout_log_path.clone(),
+            stderr_log_path: run.stderr_log_path.clone(),
             disposition: RunStepDisposition::Executed,
             attempt_number: Some(attempt_number),
             attempt_status: Some(outcome.status),
             max_attempts,
             retryable,
         })
+    }
+
+    pub fn cancel_run(&self, run_id: Uuid) -> anyhow::Result<RunRecord> {
+        let mut run = self.store.load_run(run_id)?;
+        self.store.request_run_cancel(run_id)?;
+        if run.summary.is_none() {
+            run.summary = Some(String::from("cancel requested"));
+        }
+        self.store.save_run(&run)?;
+        Ok(run)
+    }
+
+    pub fn reconcile_run(&self, run_id: Uuid) -> anyhow::Result<RunRecord> {
+        let mut run = self.store.load_run(run_id)?;
+        if run.status != crate::model::RunStatus::Running {
+            return Ok(run);
+        }
+
+        let Some(exit_code_path) = run.exit_code_path.clone() else {
+            return Ok(run);
+        };
+        let exit_code_raw = match std::fs::read_to_string(&exit_code_path) {
+            Ok(raw) => raw,
+            Err(_) => return Ok(run),
+        };
+        let exit_code = exit_code_raw.trim().parse::<i32>().unwrap_or(1);
+
+        let cancelled = self.store.cancel_request_path(run.id).exists();
+        let attempt_status = if cancelled {
+            AttemptStatus::Cancelled
+        } else if exit_code == 0 {
+            AttemptStatus::Succeeded
+        } else {
+            AttemptStatus::Failed
+        };
+
+        run.status = attempt_status.into();
+        run.finished_at = Some(Utc::now());
+        if run.summary.is_none() {
+            run.summary = Some(match attempt_status {
+                AttemptStatus::Succeeded => String::from("background run completed"),
+                AttemptStatus::Cancelled => String::from("background run cancelled"),
+                AttemptStatus::Failed => {
+                    format!("background run failed with exit code {exit_code}")
+                }
+                AttemptStatus::TimedOut => String::from("background run timed out"),
+                AttemptStatus::Running => String::from("background run still running"),
+            });
+        }
+        self.store.save_run(&run)?;
+
+        let mut session = self.store.load_session(run.session_id)?;
+        let max_attempts = session.policy.retry.max_attempts.max(1);
+        let Some(task_index) = session.tasks.iter().position(|task| task.id == run.task_id) else {
+            return Ok(run);
+        };
+        let Some(step_index) = session.tasks[task_index]
+            .steps
+            .iter()
+            .position(|step| step.id == run.step_id)
+        else {
+            return Ok(run);
+        };
+
+        let retryable = is_retryable(attempt_status, run.attempt_number, max_attempts);
+        let task_failed;
+        {
+            let task = &mut session.tasks[task_index];
+            let step = &mut task.steps[step_index];
+            if let Some(attempt) = step
+                .attempts
+                .iter_mut()
+                .find(|attempt| attempt.run_id == Some(run.id))
+            {
+                attempt.status = attempt_status;
+                attempt.finished_at = run.finished_at;
+                attempt.summary = run.summary.clone();
+            }
+
+            step.status = match attempt_status {
+                AttemptStatus::Succeeded => StepStatus::Completed,
+                AttemptStatus::Failed | AttemptStatus::TimedOut | AttemptStatus::Cancelled => {
+                    if retryable {
+                        StepStatus::Planned
+                    } else {
+                        StepStatus::Failed
+                    }
+                }
+                AttemptStatus::Running => StepStatus::Running,
+            };
+
+            let any_steps_running = task
+                .steps
+                .iter()
+                .any(|step| step.status == StepStatus::Running);
+            let any_waiting_approval = task
+                .steps
+                .iter()
+                .any(|step| step.status == StepStatus::WaitingApproval);
+            let all_steps_completed = task
+                .steps
+                .iter()
+                .all(|step| step.status == StepStatus::Completed);
+            task_failed = task
+                .steps
+                .iter()
+                .any(|step| step.status == StepStatus::Failed);
+
+            task.status = if all_steps_completed {
+                TaskStatus::Completed
+            } else if any_waiting_approval {
+                TaskStatus::WaitingApproval
+            } else if task_failed {
+                TaskStatus::Failed
+            } else if any_steps_running {
+                TaskStatus::Running
+            } else {
+                TaskStatus::Planned
+            };
+            task.touch();
+        }
+
+        session.status = if session
+            .tasks
+            .iter()
+            .all(|task| task.status == TaskStatus::Completed)
+        {
+            SessionStatus::Completed
+        } else if session
+            .tasks
+            .iter()
+            .any(|task| task.status == TaskStatus::WaitingApproval)
+        {
+            SessionStatus::WaitingApproval
+        } else if task_failed {
+            SessionStatus::Failed
+        } else if session
+            .tasks
+            .iter()
+            .any(|task| task.status == TaskStatus::Running)
+        {
+            SessionStatus::Running
+        } else {
+            SessionStatus::Created
+        };
+        session.touch();
+        self.store.save_session(&session)?;
+
+        Ok(run)
     }
 }
 
@@ -428,10 +631,14 @@ fn is_retryable(status: AttemptStatus, attempt_number: u32, max_attempts: u32) -
 
 #[cfg(test)]
 mod tests {
+    use std::thread;
+    use std::time::Duration;
+
     use tempfile::tempdir;
 
     use super::*;
-    use crate::model::{ExecutionPolicy, RetryPolicy, TimeoutPolicy};
+    use crate::executor::{ExecutorBridge, ExecutorOptions};
+    use crate::model::{ExecutionPolicy, RetryPolicy, RunStatus, TimeoutPolicy};
     use crate::storage::SessionStore;
 
     struct StubRunner {
@@ -450,6 +657,7 @@ mod tests {
             _session: &SessionRecord,
             _task: &TaskRecord,
             _step: &StepRecord,
+            _run: &RunRecord,
             _attempt_number: u32,
         ) -> AttemptOutcome {
             self.outcomes.remove(0)
@@ -524,8 +732,28 @@ mod tests {
         assert!(!result.retryable);
         assert_eq!(step.status, StepStatus::Completed);
         assert_eq!(step.attempts.len(), 1);
+        assert!(step.attempts[0].run_id.is_some());
         assert_eq!(task.status, TaskStatus::Running);
         assert_eq!(result.session.status, SessionStatus::Running);
+
+        let runs = store.list_runs().unwrap();
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].status, RunStatus::Succeeded);
+        assert_eq!(runs[0].attempt_number, 1);
+        assert!(
+            runs[0]
+                .stdout_log_path
+                .as_deref()
+                .unwrap()
+                .ends_with(".stdout.log")
+        );
+        assert!(
+            runs[0]
+                .stderr_log_path
+                .as_deref()
+                .unwrap()
+                .ends_with(".stderr.log")
+        );
     }
 
     #[test]
@@ -765,5 +993,64 @@ mod tests {
         );
         assert_eq!(result.session.status, SessionStatus::WaitingApproval);
         assert_eq!(result.session.tasks[1].steps[0].status, StepStatus::Planned);
+    }
+
+    #[test]
+    fn cancel_run_writes_persisted_cancel_request() {
+        let temp = tempdir().unwrap();
+        let store = SessionStore::new(temp.path());
+        let engine = WorkflowEngine::new(store.clone());
+        let session = store.init_session("demo").unwrap();
+        let updated = engine
+            .create_task(session.id, "bootstrap engine", vec!["plan".into()])
+            .unwrap();
+
+        let mut runner = StubRunner::new(vec![AttemptOutcome::succeeded("step ok")]);
+        let result = engine.run_next_step(updated.id, &mut runner).unwrap();
+        let run_id = result.run_id.unwrap();
+
+        let run = engine.cancel_run(run_id).unwrap();
+        let cancel_path = store.cancel_request_path(run_id);
+
+        assert_eq!(run.id, run_id);
+        assert!(cancel_path.exists());
+        assert_eq!(run.summary.as_deref(), Some("step ok"));
+    }
+
+    #[test]
+    fn reconcile_run_completes_background_attempt_and_session_state() {
+        let temp = tempdir().unwrap();
+        let store = SessionStore::new(temp.path());
+        let engine = WorkflowEngine::new(store.clone());
+        let session = store.init_session("demo").unwrap();
+        let session = engine
+            .create_task(session.id, "bg", vec!["cmd: true".into()])
+            .unwrap();
+
+        let mut runner = ExecutorBridge::with_options(ExecutorOptions {
+            background: true,
+            ..ExecutorOptions::default()
+        });
+        let result = engine.run_next_step(session.id, &mut runner).unwrap();
+        let run_id = result.run_id.unwrap();
+
+        let mut run = engine.reconcile_run(run_id).unwrap();
+        for _ in 0..20 {
+            if run.status != RunStatus::Running {
+                break;
+            }
+            thread::sleep(Duration::from_millis(100));
+            run = engine.reconcile_run(run_id).unwrap();
+        }
+        let updated = store.load_session(session.id).unwrap();
+
+        assert_eq!(run.status, RunStatus::Succeeded);
+        assert_eq!(updated.status, SessionStatus::Completed);
+        assert_eq!(updated.tasks[0].status, TaskStatus::Completed);
+        assert_eq!(updated.tasks[0].steps[0].status, StepStatus::Completed);
+        assert_eq!(
+            updated.tasks[0].steps[0].attempts[0].status,
+            AttemptStatus::Succeeded
+        );
     }
 }

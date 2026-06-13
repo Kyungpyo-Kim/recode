@@ -204,6 +204,8 @@ pub enum StepStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AttemptRecord {
     pub id: Uuid,
+    #[serde(default)]
+    pub run_id: Option<Uuid>,
     pub number: u32,
     pub status: AttemptStatus,
     pub started_at: DateTime<Utc>,
@@ -219,4 +221,83 @@ pub enum AttemptStatus {
     Failed,
     TimedOut,
     Cancelled,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RunRecord {
+    pub id: Uuid,
+    pub session_id: Uuid,
+    pub task_id: Uuid,
+    pub step_id: Uuid,
+    pub attempt_number: u32,
+    pub status: RunStatus,
+    pub mode: RunMode,
+    pub started_at: DateTime<Utc>,
+    pub finished_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub pid: Option<u32>,
+    #[serde(default)]
+    pub stdout_log_path: Option<String>,
+    #[serde(default)]
+    pub stderr_log_path: Option<String>,
+    #[serde(default)]
+    pub exit_code_path: Option<String>,
+    #[serde(default)]
+    pub summary: Option<String>,
+}
+
+impl RunRecord {
+    pub fn new(
+        session_id: Uuid,
+        task_id: Uuid,
+        step_id: Uuid,
+        attempt_number: u32,
+        mode: RunMode,
+    ) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            session_id,
+            task_id,
+            step_id,
+            attempt_number,
+            status: RunStatus::Running,
+            mode,
+            started_at: Utc::now(),
+            finished_at: None,
+            pid: None,
+            stdout_log_path: None,
+            stderr_log_path: None,
+            exit_code_path: None,
+            summary: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RunStatus {
+    Running,
+    Succeeded,
+    Failed,
+    TimedOut,
+    Cancelled,
+}
+
+impl From<AttemptStatus> for RunStatus {
+    fn from(value: AttemptStatus) -> Self {
+        match value {
+            AttemptStatus::Running => Self::Running,
+            AttemptStatus::Succeeded => Self::Succeeded,
+            AttemptStatus::Failed => Self::Failed,
+            AttemptStatus::TimedOut => Self::TimedOut,
+            AttemptStatus::Cancelled => Self::Cancelled,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RunMode {
+    Foreground,
+    Background,
 }

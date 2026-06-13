@@ -51,10 +51,15 @@ Configuration rules:
 
 ### Negative
 - policy may need another refinement when real async tool execution lands
-- timeout enforcement still needs a real runner/executor later
+- policy metadata is still thinner than the eventual audit model, especially for signals/reasons
 
 ## Follow-up
 
+Completed since this ADR:
+1. Added real wall-clock timeout enforcement in the executor layer
+2. Threaded retry/timeout policy through persisted session creation and shared CLI/TUI execution paths
+
+Still open:
 1. Add backoff policy after base retry flow proves stable
 2. Support per-task and per-step overrides
-3. Add real wall-clock timeout enforcement in the executor layer
+3. Record richer timeout/cancellation/exit metadata in attempt/run state

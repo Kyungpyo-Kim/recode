@@ -42,11 +42,17 @@ Key parts:
 
 ### Negative
 - More advanced branching and orchestration still need another layer
-- Current engine does not yet model pause, approval wait, or timeouts beyond status recording
+- The engine still lacks a true async actor/runtime model for in-flight control
 
 ## Follow-up
 
-1. Add retry and timeout policy types
-2. Add CLI commands for task creation and controlled step execution
-3. Add approval-gated tool runner abstraction
-4. Add scheduler integration on top of the same persisted aggregate
+Completed on top of this foundation:
+1. Added retry and timeout policy types
+2. Added CLI commands for task creation and controlled step execution
+3. Added approval-gated execution flow in the shared engine/executor path
+4. Added persisted run records, background execution, and reconcile flow
+
+Still open:
+1. Add scheduler integration on top of the same persisted aggregate
+2. Add explicit workflow planner / branching layer above ordered step execution
+3. Introduce true async process lifecycle control for TUI/operator steering

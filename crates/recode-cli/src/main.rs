@@ -36,6 +36,30 @@ enum Command {
     Config,
     Session(SessionCommand),
     Task(TaskCommand),
+    Run(RunCommand),
+}
+
+#[derive(Debug, Args)]
+struct RunCommand {
+    #[command(subcommand)]
+    action: RunAction,
+}
+
+#[derive(Debug, Subcommand)]
+enum RunAction {
+    List,
+    Inspect {
+        #[arg(long)]
+        id: String,
+    },
+    Reconcile {
+        #[arg(long)]
+        id: String,
+    },
+    Cancel {
+        #[arg(long)]
+        id: String,
+    },
 }
 
 #[derive(Debug, Args)]
@@ -114,6 +138,8 @@ struct ExecutionArgs {
     pty: bool,
     #[arg(long)]
     cancel_file: Option<PathBuf>,
+    #[arg(long)]
+    background: bool,
 }
 
 enum RunnerMode {
@@ -131,6 +157,7 @@ impl StepRunner for ManualStepRunner {
         _session: &recode_core::SessionRecord,
         _task: &recode_core::TaskRecord,
         _step: &recode_core::StepRecord,
+        _run: &recode_core::RunRecord,
         _attempt_number: u32,
     ) -> AttemptOutcome {
         self.outcome.clone()
@@ -143,11 +170,12 @@ impl StepRunner for RunnerMode {
         session: &recode_core::SessionRecord,
         task: &recode_core::TaskRecord,
         step: &recode_core::StepRecord,
+        run: &recode_core::RunRecord,
         attempt_number: u32,
     ) -> AttemptOutcome {
         match self {
-            RunnerMode::Bridge(runner) => runner.run_step(session, task, step, attempt_number),
-            RunnerMode::Manual(runner) => runner.run_step(session, task, step, attempt_number),
+            RunnerMode::Bridge(runner) => runner.run_step(session, task, step, run, attempt_number),
+            RunnerMode::Manual(runner) => runner.run_step(session, task, step, run, attempt_number),
         }
     }
 }
@@ -282,6 +310,41 @@ fn run() -> Result<()> {
                 })
             }
         },
+        Command::Run(command) => match command.action {
+            RunAction::List => {
+                let runs = store.list_runs()?;
+                json!({
+                    "ok": true,
+                    "config": config,
+                    "runs": runs,
+                })
+            }
+            RunAction::Inspect { id } => {
+                let run = store.load_run(id.parse()?)?;
+                json!({
+                    "ok": true,
+                    "config": config,
+                    "run": run,
+                })
+            }
+            RunAction::Reconcile { id } => {
+                let run = engine.reconcile_run(id.parse()?)?;
+                json!({
+                    "ok": true,
+                    "config": config,
+                    "run": run,
+                })
+            }
+            RunAction::Cancel { id } => {
+                let run = engine.cancel_run(id.parse()?)?;
+                json!({
+                    "ok": true,
+                    "config": config,
+                    "run": run,
+                    "cancel_request_path": store.cancel_request_path(run.id),
+                })
+            }
+        },
     };
 
     println!("{}", serde_json::to_string_pretty(&payload)?);
@@ -297,6 +360,7 @@ fn runner_for(execution: ExecutionArgs) -> RunnerMode {
             stream_output: execution.stream,
             use_pty: execution.pty,
             cancel_path: execution.cancel_file,
+            background: execution.background,
         })),
     }
 }
@@ -349,6 +413,7 @@ fn parse_outcome(outcome: &str, summary: Option<String>) -> AttemptOutcome {
         "cancel" | "cancelled" | "canceled" => AttemptOutcome {
             status: recode_core::AttemptStatus::Cancelled,
             summary: Some(summary.unwrap_or_else(|| "step cancelled".into())),
+            pid: None,
         },
         "fail" | "failed" | "error" => {
             AttemptOutcome::failed(summary.unwrap_or_else(|| "step failed".into()))
@@ -362,6 +427,10 @@ fn json_for_run_step_result(result: recode_core::RunStepResult) -> serde_json::V
         "task_id": result.task_id,
         "step_id": result.step_id,
         "step_title": result.step_title,
+        "run_id": result.run_id,
+        "run_pid": result.run_pid,
+        "stdout_log_path": result.stdout_log_path,
+        "stderr_log_path": result.stderr_log_path,
         "disposition": result.disposition,
         "attempt_number": result.attempt_number,
         "attempt_status": result.attempt_status,

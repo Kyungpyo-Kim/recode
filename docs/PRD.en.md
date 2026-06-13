@@ -2,8 +2,10 @@
 
 - **Status:** Draft for internal review
 - **Version:** v1.1
-- **Last Updated:** 2026-06-12
+- **Last Updated:** 2026-06-13
 - **Owner:** Kyungpyo
+
+> Implementation note, 2026-06-13: the current repo already covers the Rust workspace, persisted session/task/step/attempt model, shared CLI/TUI executor path, timeout enforcement, background run records, reconcile flow, task/step cursoring, TUI log tail, status banner, and selected-run cancel request flow. Built-in scheduler, explicit step spec model, richer retry/backoff, and real async process control remain future milestones.
 
 ## 1. Overview
 
