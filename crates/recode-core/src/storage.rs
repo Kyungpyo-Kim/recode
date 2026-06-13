@@ -113,6 +113,19 @@ impl SessionStore {
         self.cancels_dir().join(format!("{run_id}.cancel"))
     }
 
+    pub fn request_artifact_path(&self, run_id: Uuid) -> PathBuf {
+        self.artifacts_dir().join(format!("{run_id}.request.json"))
+    }
+
+    pub fn response_artifact_path(&self, run_id: Uuid) -> PathBuf {
+        self.artifacts_dir().join(format!("{run_id}.response.json"))
+    }
+
+    pub fn transcript_artifact_path(&self, run_id: Uuid) -> PathBuf {
+        self.artifacts_dir()
+            .join(format!("{run_id}.transcript.json"))
+    }
+
     pub fn request_run_cancel(&self, run_id: Uuid) -> Result<PathBuf> {
         fs::create_dir_all(self.cancels_dir()).context("failed to create cancel directory")?;
         let path = self.cancel_request_path(run_id);
@@ -162,6 +175,10 @@ impl SessionStore {
 
     fn cancels_dir(&self) -> PathBuf {
         self.root.join("cancels")
+    }
+
+    fn artifacts_dir(&self) -> PathBuf {
+        self.root.join("artifacts")
     }
 
     fn session_path(&self, id: Uuid) -> PathBuf {

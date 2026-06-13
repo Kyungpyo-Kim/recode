@@ -21,6 +21,14 @@ struct Cli {
     #[arg(long, global = true)]
     default_provider: Option<String>,
     #[arg(long, global = true)]
+    provider_mode: Option<String>,
+    #[arg(long, global = true)]
+    provider_base_url: Option<String>,
+    #[arg(long, global = true)]
+    provider_api_key_env: Option<String>,
+    #[arg(long, global = true)]
+    provider_model: Option<String>,
+    #[arg(long, global = true)]
     default_timeout_secs: Option<u64>,
     #[arg(long, global = true)]
     default_max_attempts: Option<u32>,
@@ -103,10 +111,28 @@ enum TaskAction {
         session_id: String,
         #[arg(long)]
         title: String,
-        #[arg(long = "step")]
+        #[arg(
+            long = "step",
+            help = "Legacy step text. cmd:/shell:/exec: prefixes become explicit shell steps; plain text becomes operator steps."
+        )]
         steps: Vec<String>,
-        #[arg(long = "approval-step")]
+        #[arg(
+            long = "approval-step",
+            help = "Legacy approval-gated step text. cmd:/shell:/exec: prefixes become explicit shell steps gated by approval."
+        )]
         approval_steps: Vec<String>,
+        #[arg(
+            long = "shell-step",
+            help = "Explicit shell step in the form <title>::<command>."
+        )]
+        shell_steps: Vec<String>,
+        #[arg(long = "operator-step", help = "Explicit operator/noop step title.")]
+        operator_steps: Vec<String>,
+        #[arg(
+            long = "chat-step",
+            help = "Explicit llm_chat step in the form <title>::<prompt>."
+        )]
+        chat_steps: Vec<String>,
     },
     RunNext {
         #[arg(long)]
@@ -241,7 +267,7 @@ fn run() -> Result<()> {
                 })
             }
             SessionAction::RunAll { id, execution } => {
-                let mut runner = runner_for(execution);
+                let mut runner = runner_for(execution, config.provider.clone());
                 let result = engine.run_all(id.parse()?, &mut runner)?;
                 json!({
                     "ok": true,
@@ -259,8 +285,17 @@ fn run() -> Result<()> {
                 title,
                 steps,
                 approval_steps,
+                shell_steps,
+                operator_steps,
+                chat_steps,
             } => {
-                let step_specs = collect_step_specs(steps, approval_steps)?;
+                let step_specs = collect_step_specs(
+                    steps,
+                    approval_steps,
+                    shell_steps,
+                    operator_steps,
+                    chat_steps,
+                )?;
                 let session =
                     engine.create_task_with_steps(session_id.parse()?, title, step_specs)?;
                 let task = session
@@ -280,7 +315,7 @@ fn run() -> Result<()> {
                 task_id,
                 execution,
             } => {
-                let mut runner = runner_for(execution);
+                let mut runner = runner_for(execution, config.provider.clone());
                 let result = match task_id {
                     Some(task_id) => engine.run_task_next_step(
                         session_id.parse()?,
@@ -351,7 +386,7 @@ fn run() -> Result<()> {
     Ok(())
 }
 
-fn runner_for(execution: ExecutionArgs) -> RunnerMode {
+fn runner_for(execution: ExecutionArgs, provider: recode_core::ProviderConfig) -> RunnerMode {
     match execution.outcome {
         Some(outcome) => RunnerMode::Manual(ManualStepRunner {
             outcome: parse_outcome(&outcome, execution.summary),
@@ -361,6 +396,7 @@ fn runner_for(execution: ExecutionArgs) -> RunnerMode {
             use_pty: execution.pty,
             cancel_path: execution.cancel_file,
             background: execution.background,
+            provider: Some(provider),
         })),
     }
 }
@@ -377,6 +413,13 @@ fn cli_partial(cli: &Cli) -> PartialConfig {
         state_dir: cli.state_dir.clone(),
         log_level: cli.log_level.clone(),
         default_provider: cli.default_provider.clone(),
+        provider_mode: cli
+            .provider_mode
+            .as_deref()
+            .and_then(recode_core::ProviderMode::parse),
+        provider_base_url: cli.provider_base_url.clone(),
+        provider_api_key_env: cli.provider_api_key_env.clone(),
+        provider_model: cli.provider_model.clone(),
         default_timeout_secs: cli.default_timeout_secs,
         default_max_attempts: cli.default_max_attempts,
         approval_policy: cli
@@ -386,20 +429,49 @@ fn cli_partial(cli: &Cli) -> PartialConfig {
     }
 }
 
-fn collect_step_specs(steps: Vec<String>, approval_steps: Vec<String>) -> Result<Vec<StepSpec>> {
-    let specs: Vec<StepSpec> = steps
-        .into_iter()
-        .map(StepSpec::new)
-        .chain(approval_steps.into_iter().map(StepSpec::requires_approval))
-        .collect();
+fn collect_step_specs(
+    steps: Vec<String>,
+    approval_steps: Vec<String>,
+    shell_steps: Vec<String>,
+    operator_steps: Vec<String>,
+    chat_steps: Vec<String>,
+) -> Result<Vec<StepSpec>> {
+    let mut specs: Vec<StepSpec> = steps.into_iter().map(StepSpec::new).collect();
+    specs.extend(approval_steps.into_iter().map(StepSpec::requires_approval));
+
+    for raw in shell_steps {
+        let (title, command) = split_titled_value(&raw, "shell-step")?;
+        specs.push(StepSpec::shell(title, command));
+    }
+
+    for title in operator_steps {
+        specs.push(StepSpec::operator(title));
+    }
+
+    for raw in chat_steps {
+        let (title, prompt) = split_titled_value(&raw, "chat-step")?;
+        specs.push(StepSpec::llm_chat(title, prompt));
+    }
 
     if specs.is_empty() {
-        return Err(anyhow!(
-            "at least one --step or --approval-step must be provided"
-        ));
+        return Err(anyhow!("at least one step flag must be provided"));
     }
 
     Ok(specs)
+}
+
+fn split_titled_value(raw: &str, flag_name: &str) -> Result<(String, String)> {
+    let Some((title, value)) = raw.split_once("::") else {
+        return Err(anyhow!("--{flag_name} must use the form <title>::<value>"));
+    };
+    let title = title.trim();
+    let value = value.trim();
+    if title.is_empty() || value.is_empty() {
+        return Err(anyhow!(
+            "--{flag_name} requires non-empty <title> and <value>"
+        ));
+    }
+    Ok((title.to_string(), value.to_string()))
 }
 
 fn parse_outcome(outcome: &str, summary: Option<String>) -> AttemptOutcome {
@@ -431,6 +503,14 @@ fn json_for_run_step_result(result: recode_core::RunStepResult) -> serde_json::V
         "run_pid": result.run_pid,
         "stdout_log_path": result.stdout_log_path,
         "stderr_log_path": result.stderr_log_path,
+        "request_artifact_path": result.request_artifact_path,
+        "response_artifact_path": result.response_artifact_path,
+        "transcript_artifact_path": result.transcript_artifact_path,
+        "llm_provider": result.llm_provider,
+        "llm_model": result.llm_model,
+        "llm_prompt_tokens": result.llm_prompt_tokens,
+        "llm_completion_tokens": result.llm_completion_tokens,
+        "llm_total_tokens": result.llm_total_tokens,
         "disposition": result.disposition,
         "attempt_number": result.attempt_number,
         "attempt_status": result.attempt_status,

@@ -32,7 +32,7 @@ The repo now has the first working MVP foundation:
 - Deterministic execution engine in `recode-core`
 - Minimal layered configuration system with file, env, and CLI precedence
 - Retry and timeout policy persisted at session level
-- Approval wait foundation in the core model/engine
+- Approval wait foundation in the core model/engine, including `on_failure` pause-and-approve semantics
 - Shared `ExecutorBridge` used by both CLI and TUI
 - Real timeout enforcement for shell-backed steps
 - Shared execution options for streaming, PTY preference, and file-based cancellation
@@ -74,19 +74,23 @@ The engine currently supports:
 - create a task with ordered steps
 - create approval-gated steps that stop at a wait boundary
 - approve a blocked step and make it runnable again
+- pause on failed/timed_out/cancelled attempts when `approval_policy=on_failure`
+- resume an `on_failure` blocked step after operator approval
 - select the next runnable step across the session
 - execute only a targeted task by `task_id`
 - run all remaining runnable steps in a session until blocked or complete
 - persist attempt history and resulting task/session status
 - retry a failed or timed out step while retry budget remains
-- stop retrying once `max_attempts` is exhausted
+- stop retrying once `max_attempts` is exhausted unless an operator explicitly re-approves continuation
 
 ### Shared executor bridge
 
 CLI and TUI now share the same minimal executor path.
 
 Current behavior:
-- step titles prefixed with `cmd:`, `shell:`, or `exec:` run in the local shell
+- persisted steps now carry an explicit `kind` plus optional executor payload, instead of relying on title-prefix routing at runtime
+- current CLI compatibility still accepts legacy `cmd:`, `shell:`, or `exec:` step text and normalizes it into explicit shell-step records on write
+- a minimal `llm_chat` executor now exists for explicit chat steps and uses the configured provider/model surface for one-shot OpenAI-compatible requests
 - shell-backed steps are killed and marked `timed_out` when they exceed `session.policy.timeout.step_timeout_secs`
 - `--stream` inherits stdio for live command output in the CLI path
 - `--pty` prefers a PTY-backed launch on Unix and falls back to the normal shell bridge if PTY launch is unavailable
@@ -104,7 +108,11 @@ cargo run -p recode-cli -- session init --name timeout-demo --step-timeout-secs 
 cargo run -p recode-cli -- task create \
   --session-id <session_uuid> \
   --title "shell demo" \
-  --step "cmd: sleep 2"
+  --shell-step "sleep::sleep 2"
+cargo run -p recode-cli -- task create \
+  --session-id <session_uuid> \
+  --title "chat demo" \
+  --chat-step "ask::Summarize the Rust ownership model in 3 bullets"
 cargo run -p recode-cli -- task run-next --session-id <session_uuid>
 cargo run -p recode-cli -- task run-next --session-id <session_uuid> --stream
 cargo run -p recode-cli -- task run-next --session-id <session_uuid> --stream --pty
@@ -138,12 +146,13 @@ If `--outcome` is omitted, CLI uses the shared `ExecutorBridge`.
 
 The current TUI now supports both visibility and operator steering on top of the shared bridge.
 It still avoids true live streaming and hard in-flight process control inside the alternate screen, but it now covers the main MVP operator loop for selection, execution, approval, background reconcile, output inspection, and cancel-request flow.
+For `llm_chat` steps it now prefers a chat-first layout: transcript first, composer second, and task/run context alongside the log tail, with pane focus and practical vertical scrolling for longer conversations.
 
 Shown on screen:
 - session list panel
 - selected session/task/step/run status banner
-- selected session detail panel
-- selected step stdout/stderr log tail panel
+- chat-first `llm_chat` detail view with transcript, composer, context, and log tail
+- default non-chat detail view with session/task/step summary plus logs/transcript
 - task / step / attempt summary
 - retry / timeout / approval policy summary
 - approval-required and approval-granted step state
@@ -152,6 +161,9 @@ Keybindings:
 - `↑` / `↓` or `j` / `k`: move session selection
 - `←` / `→` or `h` / `l`: move task selection inside the selected session
 - `u` / `d`: move step selection inside the selected task
+- `Tab` / `Shift+Tab`: rotate focused pane in the chat-first view (transcript, composer, context, log)
+- `PgUp` / `PgDn`: scroll the focused pane
+- `Home` / `End`: jump the focused pane to the top or bottom
 - `r`: reconcile finished background runs, then refresh from disk
 - `n`: run next step on selected session
 - `b`: run next step in background on selected session
@@ -189,9 +201,29 @@ Current config surface:
 - `state_dir`
 - `log_level`
 - `default_provider`
+- `provider_mode`
+- `provider_base_url`
+- `provider_api_key_env`
+- `provider_model`
 - `default_timeout_secs`
 - `default_max_attempts`
-- `approval_policy`
+- `approval_policy` (`manual`, `on_failure`, `never`)
+
+Current LLM executor scope:
+- `llm_chat` uses one blocking OpenAI-compatible `POST /chat/completions`
+- request/response text is written into the run stdout/stderr logs
+- request/response/transcript JSON artifacts are also persisted under the state dir per run
+- each new `llm_chat` attempt reloads the previous transcript for that step and appends the new user message, so step-level multi-turn chat now works
+- persisted transcript keeps full history, but outbound API context is trimmed to a recent message window before each request
+- `llm_chat` now supports minimal CLI streaming when execution runs with `--stream`, using OpenAI-compatible SSE deltas through the shared executor
+- TUI now does minimal live redraw for streaming `llm_chat` runs by polling persisted run/log state while a foreground chat worker is in flight
+- when the selected step is `llm_chat`, the alternate-screen layout becomes chat-first so the transcript and next prompt stay in the primary reading area
+- transcript pane now reflects in-flight assistant streaming directly from the persisted transcript artifact, while the log tail still mirrors raw streamed output
+- background mode is still not implemented for `llm_chat`
+- CLI can now create explicit `--chat-step` records, and TUI now shows persisted chat transcript artifacts for the selected `llm_chat` step
+- TUI also supports minimal prompt editing for the selected `llm_chat` step: `e` to edit, `Enter` to save and run, `Esc` to cancel
+- chat-first panes keep independent scroll offsets, and the focused pane gets a highlighted border so long transcripts and prompts remain navigable without changing the session/task/step cursor
+- CLI run results and TUI selected-run detail now show provider/model/token usage when the backend returns `usage`
 
 See:
 - [ADR 0001: Execution Engine Foundation](docs/adr/0001-execution-engine-foundation.md)
@@ -213,8 +245,9 @@ cargo test --workspace
 
 ## Next steps
 
-- deepen PTY support beyond the current Unix `script` fallback and add richer streaming capture for TUI/log panes
+- deepen PTY support beyond the current Unix `script` fallback and improve the in-flight TUI streaming UX beyond the current file-polling redraw
+- deepen the chat UX beyond the current pane-focus + vertical-scroll model, especially transcript-aware composer behaviors and more granular in-pane navigation
 - add true async runtime/process control so TUI cancel is not only request + reconcile
-- replace title-prefix routing with an explicit step action/spec model
+- Phase C is complete: CLI/TUI now surface provider/model/token-usage summary where the LLM response includes usage metadata
 - add backoff and richer retry policy types
 - build approval policy `on_failure` into real differentiated behavior

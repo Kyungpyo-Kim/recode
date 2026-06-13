@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::model::{
     ApprovalPolicy, AttemptRecord, AttemptStatus, RunMode, RunRecord, SessionRecord, SessionStatus,
-    StepRecord, StepStatus, TaskRecord, TaskStatus,
+    StepKind, StepRecord, StepStatus, TaskRecord, TaskStatus,
 };
 use crate::storage::SessionStore;
 
@@ -45,21 +45,60 @@ impl AttemptOutcome {
 #[derive(Debug, Clone)]
 pub struct StepSpec {
     pub title: String,
+    pub kind: StepKind,
+    pub command: Option<String>,
+    pub prompt: Option<String>,
     pub requires_approval: bool,
 }
 
 impl StepSpec {
     pub fn new(title: impl Into<String>) -> Self {
+        Self::from_legacy_text(title, false)
+    }
+
+    pub fn requires_approval(title: impl Into<String>) -> Self {
+        Self::from_legacy_text(title, true)
+    }
+
+    pub fn shell(title: impl Into<String>, command: impl Into<String>) -> Self {
         Self {
             title: title.into(),
+            kind: StepKind::Shell,
+            command: Some(command.into()),
+            prompt: None,
             requires_approval: false,
         }
     }
 
-    pub fn requires_approval(title: impl Into<String>) -> Self {
+    pub fn llm_chat(title: impl Into<String>, prompt: impl Into<String>) -> Self {
         Self {
             title: title.into(),
-            requires_approval: true,
+            kind: StepKind::LlmChat,
+            command: None,
+            prompt: Some(prompt.into()),
+            requires_approval: false,
+        }
+    }
+
+    pub fn operator(title: impl Into<String>) -> Self {
+        Self {
+            title: title.into(),
+            kind: StepKind::Operator,
+            command: None,
+            prompt: None,
+            requires_approval: false,
+        }
+    }
+
+    fn from_legacy_text(title: impl Into<String>, requires_approval: bool) -> Self {
+        let title = title.into();
+        let (kind, command) = StepKind::from_legacy_title(&title);
+        Self {
+            title,
+            kind,
+            command,
+            prompt: None,
+            requires_approval,
         }
     }
 }
@@ -103,6 +142,14 @@ pub struct RunStepResult {
     pub run_pid: Option<u32>,
     pub stdout_log_path: Option<String>,
     pub stderr_log_path: Option<String>,
+    pub request_artifact_path: Option<String>,
+    pub response_artifact_path: Option<String>,
+    pub transcript_artifact_path: Option<String>,
+    pub llm_provider: Option<String>,
+    pub llm_model: Option<String>,
+    pub llm_prompt_tokens: Option<u64>,
+    pub llm_completion_tokens: Option<u64>,
+    pub llm_total_tokens: Option<u64>,
     pub disposition: RunStepDisposition,
     pub attempt_number: Option<u32>,
     pub attempt_status: Option<AttemptStatus>,
@@ -135,6 +182,15 @@ pub struct WorkflowEngine {
     store: SessionStore,
 }
 
+#[derive(Debug, Default, Clone)]
+struct LlmResponseSummary {
+    provider: Option<String>,
+    model: Option<String>,
+    prompt_tokens: Option<u64>,
+    completion_tokens: Option<u64>,
+    total_tokens: Option<u64>,
+}
+
 impl WorkflowEngine {
     pub fn new(store: SessionStore) -> Self {
         Self { store }
@@ -164,7 +220,15 @@ impl WorkflowEngine {
             title,
             steps
                 .into_iter()
-                .map(|step| StepRecord::new_with_approval(step.title, step.requires_approval))
+                .map(|step| {
+                    StepRecord::new_with_kind(
+                        step.title,
+                        step.kind,
+                        step.command,
+                        step.prompt,
+                        step.requires_approval,
+                    )
+                })
                 .collect(),
         );
         session.tasks.push(task);
@@ -308,6 +372,14 @@ impl WorkflowEngine {
                 run_pid: None,
                 stdout_log_path: None,
                 stderr_log_path: None,
+                request_artifact_path: None,
+                response_artifact_path: None,
+                transcript_artifact_path: None,
+                llm_provider: None,
+                llm_model: None,
+                llm_prompt_tokens: None,
+                llm_completion_tokens: None,
+                llm_total_tokens: None,
                 disposition: RunStepDisposition::WaitingApproval,
                 attempt_number: None,
                 attempt_status: None,
@@ -328,6 +400,24 @@ impl WorkflowEngine {
         run.stdout_log_path = Some(self.store.stdout_log_path(run.id).display().to_string());
         run.stderr_log_path = Some(self.store.stderr_log_path(run.id).display().to_string());
         run.exit_code_path = Some(self.store.exit_code_path(run.id).display().to_string());
+        run.request_artifact_path = Some(
+            self.store
+                .request_artifact_path(run.id)
+                .display()
+                .to_string(),
+        );
+        run.response_artifact_path = Some(
+            self.store
+                .response_artifact_path(run.id)
+                .display()
+                .to_string(),
+        );
+        run.transcript_artifact_path = Some(
+            self.store
+                .transcript_artifact_path(run.id)
+                .display()
+                .to_string(),
+        );
         self.store.save_run(&run)?;
         let outcome = runner.run_step(
             &session,
@@ -338,6 +428,7 @@ impl WorkflowEngine {
         );
         let now = Utc::now();
         let retryable = is_retryable(outcome.status, attempt_number, max_attempts);
+        let requires_failure_approval = outcome_requires_failure_approval(&session, outcome.status);
         run.status = outcome.status.into();
         run.finished_at = match outcome.status {
             AttemptStatus::Running => None,
@@ -368,7 +459,10 @@ impl WorkflowEngine {
             step.status = match outcome.status {
                 AttemptStatus::Succeeded => StepStatus::Completed,
                 AttemptStatus::Failed | AttemptStatus::TimedOut | AttemptStatus::Cancelled => {
-                    if retryable {
+                    if requires_failure_approval {
+                        step.approval_granted = false;
+                        StepStatus::WaitingApproval
+                    } else if retryable {
                         StepStatus::Planned
                     } else {
                         StepStatus::Failed
@@ -385,6 +479,8 @@ impl WorkflowEngine {
 
             if all_steps_completed {
                 task.status = TaskStatus::Completed;
+            } else if task.steps[step_index].status == StepStatus::WaitingApproval {
+                task.status = TaskStatus::WaitingApproval;
             } else if task_failed {
                 task.status = TaskStatus::Failed;
             } else {
@@ -398,6 +494,12 @@ impl WorkflowEngine {
             .all(|task| task.status == TaskStatus::Completed)
         {
             SessionStatus::Completed
+        } else if session
+            .tasks
+            .iter()
+            .any(|task| task.status == TaskStatus::WaitingApproval)
+        {
+            SessionStatus::WaitingApproval
         } else if task_failed {
             SessionStatus::Failed
         } else {
@@ -406,6 +508,8 @@ impl WorkflowEngine {
         session.touch();
 
         self.store.save_session(&session)?;
+
+        let llm_summary = llm_response_summary(run.response_artifact_path.as_deref());
 
         Ok(RunStepResult {
             session,
@@ -416,6 +520,14 @@ impl WorkflowEngine {
             run_pid: run.pid,
             stdout_log_path: run.stdout_log_path.clone(),
             stderr_log_path: run.stderr_log_path.clone(),
+            request_artifact_path: run.request_artifact_path.clone(),
+            response_artifact_path: run.response_artifact_path.clone(),
+            transcript_artifact_path: run.transcript_artifact_path.clone(),
+            llm_provider: llm_summary.provider,
+            llm_model: llm_summary.model,
+            llm_prompt_tokens: llm_summary.prompt_tokens,
+            llm_completion_tokens: llm_summary.completion_tokens,
+            llm_total_tokens: llm_summary.total_tokens,
             disposition: RunStepDisposition::Executed,
             attempt_number: Some(attempt_number),
             attempt_status: Some(outcome.status),
@@ -487,6 +599,7 @@ impl WorkflowEngine {
         };
 
         let retryable = is_retryable(attempt_status, run.attempt_number, max_attempts);
+        let requires_failure_approval = outcome_requires_failure_approval(&session, attempt_status);
         let task_failed;
         {
             let task = &mut session.tasks[task_index];
@@ -504,7 +617,10 @@ impl WorkflowEngine {
             step.status = match attempt_status {
                 AttemptStatus::Succeeded => StepStatus::Completed,
                 AttemptStatus::Failed | AttemptStatus::TimedOut | AttemptStatus::Cancelled => {
-                    if retryable {
+                    if requires_failure_approval {
+                        step.approval_granted = false;
+                        StepStatus::WaitingApproval
+                    } else if retryable {
                         StepStatus::Planned
                     } else {
                         StepStatus::Failed
@@ -600,6 +716,14 @@ fn step_requires_manual_approval(session: &SessionRecord, step: &StepRecord) -> 
         && !matches!(session.policy.approval, ApprovalPolicy::Never)
 }
 
+fn outcome_requires_failure_approval(session: &SessionRecord, status: AttemptStatus) -> bool {
+    matches!(session.policy.approval, ApprovalPolicy::OnFailure)
+        && matches!(
+            status,
+            AttemptStatus::Failed | AttemptStatus::TimedOut | AttemptStatus::Cancelled
+        )
+}
+
 fn refresh_session_status(session: &mut SessionRecord) {
     if session
         .tasks
@@ -621,6 +745,43 @@ fn refresh_session_status(session: &mut SessionRecord) {
         session.status = SessionStatus::Failed;
     } else {
         session.status = SessionStatus::Created;
+    }
+}
+
+fn llm_response_summary(path: Option<&str>) -> LlmResponseSummary {
+    let Some(path) = path else {
+        return LlmResponseSummary::default();
+    };
+    let Ok(raw) = std::fs::read_to_string(path) else {
+        return LlmResponseSummary::default();
+    };
+    let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&raw) else {
+        return LlmResponseSummary::default();
+    };
+
+    LlmResponseSummary {
+        provider: parsed
+            .get("provider")
+            .and_then(|v| v.get("name"))
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
+        model: parsed
+            .get("provider")
+            .and_then(|v| v.get("model"))
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
+        prompt_tokens: parsed
+            .get("usage")
+            .and_then(|v| v.get("prompt_tokens"))
+            .and_then(|v| v.as_u64()),
+        completion_tokens: parsed
+            .get("usage")
+            .and_then(|v| v.get("completion_tokens"))
+            .and_then(|v| v.as_u64()),
+        total_tokens: parsed
+            .get("usage")
+            .and_then(|v| v.get("total_tokens"))
+            .and_then(|v| v.as_u64()),
     }
 }
 
@@ -754,6 +915,27 @@ mod tests {
                 .unwrap()
                 .ends_with(".stderr.log")
         );
+        assert!(
+            runs[0]
+                .request_artifact_path
+                .as_deref()
+                .unwrap()
+                .ends_with(".request.json")
+        );
+        assert!(
+            runs[0]
+                .response_artifact_path
+                .as_deref()
+                .unwrap()
+                .ends_with(".response.json")
+        );
+        assert!(
+            runs[0]
+                .transcript_artifact_path
+                .as_deref()
+                .unwrap()
+                .ends_with(".transcript.json")
+        );
     }
 
     #[test]
@@ -841,6 +1023,59 @@ mod tests {
         assert_eq!(result.attempt_status, Some(AttemptStatus::TimedOut));
         assert!(result.retryable);
         assert_eq!(step.status, StepStatus::Planned);
+    }
+
+    #[test]
+    fn on_failure_policy_moves_failed_attempt_to_waiting_approval() {
+        let temp = tempdir().unwrap();
+        let store = SessionStore::new(temp.path());
+        let engine = WorkflowEngine::new(store.clone());
+        let session = session_with_policy(&store, 2, 10, ApprovalPolicy::OnFailure);
+        let updated = engine
+            .create_task(session.id, "bootstrap engine", vec!["plan".into()])
+            .unwrap();
+
+        let mut runner = StubRunner::new(vec![AttemptOutcome::failed("boom")]);
+        let result = engine.run_next_step(updated.id, &mut runner).unwrap();
+        let step = &result.session.tasks[0].steps[0];
+
+        assert_eq!(result.attempt_status, Some(AttemptStatus::Failed));
+        assert!(result.retryable);
+        assert_eq!(step.status, StepStatus::WaitingApproval);
+        assert_eq!(result.session.tasks[0].status, TaskStatus::WaitingApproval);
+        assert_eq!(result.session.status, SessionStatus::WaitingApproval);
+    }
+
+    #[test]
+    fn approved_on_failure_step_can_resume_and_succeed() {
+        let temp = tempdir().unwrap();
+        let store = SessionStore::new(temp.path());
+        let engine = WorkflowEngine::new(store.clone());
+        let session = session_with_policy(&store, 2, 10, ApprovalPolicy::OnFailure);
+        let session = engine
+            .create_task(session.id, "bootstrap engine", vec!["plan".into()])
+            .unwrap();
+
+        let mut fail_runner = StubRunner::new(vec![AttemptOutcome::failed("boom")]);
+        let waited = engine.run_next_step(session.id, &mut fail_runner).unwrap();
+        let task = &waited.session.tasks[0];
+        let step = &task.steps[0];
+
+        let approved = engine
+            .approve_step(waited.session.id, task.id, step.id)
+            .unwrap();
+        assert_eq!(approved.status, SessionStatus::Created);
+        assert_eq!(approved.tasks[0].status, TaskStatus::Planned);
+        assert_eq!(approved.tasks[0].steps[0].status, StepStatus::Planned);
+        assert!(approved.tasks[0].steps[0].approval_granted);
+
+        let mut success_runner = StubRunner::new(vec![AttemptOutcome::succeeded("recovered")]);
+        let resumed = engine
+            .run_next_step(approved.id, &mut success_runner)
+            .unwrap();
+        assert_eq!(resumed.session.status, SessionStatus::Completed);
+        assert_eq!(resumed.session.tasks[0].steps[0].attempts.len(), 2);
+        assert_eq!(resumed.session.tasks[0].steps[0].attempts[1].number, 2);
     }
 
     #[test]

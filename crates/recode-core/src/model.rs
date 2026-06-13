@@ -161,6 +161,12 @@ pub enum TaskStatus {
 pub struct StepRecord {
     pub id: Uuid,
     pub title: String,
+    #[serde(default)]
+    pub kind: StepKind,
+    #[serde(default)]
+    pub command: Option<String>,
+    #[serde(default)]
+    pub prompt: Option<String>,
     pub status: StepStatus,
     #[serde(default)]
     pub requires_approval: bool,
@@ -174,10 +180,33 @@ impl StepRecord {
         Self::new_with_approval(title, false)
     }
 
+    pub fn shell(title: impl Into<String>, command: impl Into<String>) -> Self {
+        Self::new_with_kind(title, StepKind::Shell, Some(command.into()), None, false)
+    }
+
+    pub fn llm_chat(title: impl Into<String>, prompt: impl Into<String>) -> Self {
+        Self::new_with_kind(title, StepKind::LlmChat, None, Some(prompt.into()), false)
+    }
+
     pub fn new_with_approval(title: impl Into<String>, requires_approval: bool) -> Self {
+        let title = title.into();
+        let (kind, command) = StepKind::from_legacy_title(&title);
+        Self::new_with_kind(title, kind, command, None, requires_approval)
+    }
+
+    pub fn new_with_kind(
+        title: impl Into<String>,
+        kind: StepKind,
+        command: Option<String>,
+        prompt: Option<String>,
+        requires_approval: bool,
+    ) -> Self {
         Self {
             id: Uuid::new_v4(),
             title: title.into(),
+            kind,
+            command,
+            prompt,
             status: StepStatus::Planned,
             requires_approval,
             approval_granted: false,
@@ -187,6 +216,30 @@ impl StepRecord {
 
     pub fn is_terminal(&self) -> bool {
         matches!(self.status, StepStatus::Completed | StepStatus::Skipped)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum StepKind {
+    Shell,
+    LlmChat,
+    #[default]
+    Operator,
+}
+
+impl StepKind {
+    pub fn from_legacy_title(title: &str) -> (Self, Option<String>) {
+        let title = title.trim();
+        for prefix in ["cmd:", "shell:", "exec:"] {
+            if let Some(command) = title.strip_prefix(prefix) {
+                let command = command.trim();
+                if !command.is_empty() {
+                    return (Self::Shell, Some(command.to_string()));
+                }
+            }
+        }
+        (Self::Operator, None)
     }
 }
 
@@ -243,6 +296,12 @@ pub struct RunRecord {
     #[serde(default)]
     pub exit_code_path: Option<String>,
     #[serde(default)]
+    pub request_artifact_path: Option<String>,
+    #[serde(default)]
+    pub response_artifact_path: Option<String>,
+    #[serde(default)]
+    pub transcript_artifact_path: Option<String>,
+    #[serde(default)]
     pub summary: Option<String>,
 }
 
@@ -268,6 +327,9 @@ impl RunRecord {
             stdout_log_path: None,
             stderr_log_path: None,
             exit_code_path: None,
+            request_artifact_path: None,
+            response_artifact_path: None,
+            transcript_artifact_path: None,
             summary: None,
         }
     }

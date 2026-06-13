@@ -1,6 +1,10 @@
 state_dir = ".recode/state"
 log_level = "info"
 default_provider = "openai-compatible"
+provider_mode = "openai_compatible"
+provider_base_url = "https://api.openai.com/v1"
+provider_api_key_env = "OPENAI_API_KEY"
+provider_model = "gpt-4.1-mini"
 default_timeout_secs = 300
 default_max_attempts = 1
 approval_policy = "manual"

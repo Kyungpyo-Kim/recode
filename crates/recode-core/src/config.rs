@@ -13,12 +13,53 @@ pub const DEFAULT_TIMEOUT_SECS: u64 = 300;
 pub const DEFAULT_PROVIDER: &str = "openai-compatible";
 pub const DEFAULT_CONFIG_FILE: &str = "recode.toml";
 pub const DEFAULT_MAX_ATTEMPTS: u32 = 1;
+pub const DEFAULT_PROVIDER_MODE: &str = "openai_compatible";
+pub const DEFAULT_PROVIDER_MODEL: &str = "gpt-4.1-mini";
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ProviderMode {
+    OpenAiCompatible,
+    Codex,
+}
+
+impl ProviderMode {
+    pub fn parse(raw: &str) -> Option<Self> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "openai-compatible" | "openai_compatible" | "openai" => Some(Self::OpenAiCompatible),
+            "codex" => Some(Self::Codex),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProviderConfig {
+    pub name: String,
+    pub mode: ProviderMode,
+    pub base_url: Option<String>,
+    pub api_key_env: String,
+    pub model: String,
+}
+
+impl Default for ProviderConfig {
+    fn default() -> Self {
+        Self {
+            name: DEFAULT_PROVIDER.to_string(),
+            mode: ProviderMode::OpenAiCompatible,
+            base_url: Some("https://api.openai.com/v1".to_string()),
+            api_key_env: "OPENAI_API_KEY".to_string(),
+            model: DEFAULT_PROVIDER_MODEL.to_string(),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RecodeConfig {
     pub state_dir: PathBuf,
     pub log_level: String,
     pub default_provider: String,
+    pub provider: ProviderConfig,
     pub default_timeout_secs: u64,
     pub default_max_attempts: u32,
     pub approval_policy: ApprovalPolicy,
@@ -31,6 +72,7 @@ impl Default for RecodeConfig {
             state_dir: PathBuf::from(DEFAULT_STATE_DIR),
             log_level: DEFAULT_LOG_LEVEL.to_string(),
             default_provider: DEFAULT_PROVIDER.to_string(),
+            provider: ProviderConfig::default(),
             default_timeout_secs: DEFAULT_TIMEOUT_SECS,
             default_max_attempts: DEFAULT_MAX_ATTEMPTS,
             approval_policy: ApprovalPolicy::Manual,
@@ -58,6 +100,10 @@ pub struct PartialConfig {
     pub state_dir: Option<PathBuf>,
     pub log_level: Option<String>,
     pub default_provider: Option<String>,
+    pub provider_mode: Option<ProviderMode>,
+    pub provider_base_url: Option<String>,
+    pub provider_api_key_env: Option<String>,
+    pub provider_model: Option<String>,
     pub default_timeout_secs: Option<u64>,
     pub default_max_attempts: Option<u32>,
     pub approval_policy: Option<ApprovalPolicy>,
@@ -73,6 +119,18 @@ impl PartialConfig {
         }
         if other.default_provider.is_some() {
             self.default_provider = other.default_provider;
+        }
+        if other.provider_mode.is_some() {
+            self.provider_mode = other.provider_mode;
+        }
+        if other.provider_base_url.is_some() {
+            self.provider_base_url = other.provider_base_url;
+        }
+        if other.provider_api_key_env.is_some() {
+            self.provider_api_key_env = other.provider_api_key_env;
+        }
+        if other.provider_model.is_some() {
+            self.provider_model = other.provider_model;
         }
         if other.default_timeout_secs.is_some() {
             self.default_timeout_secs = other.default_timeout_secs;
@@ -138,6 +196,19 @@ impl ConfigLoader {
         if let Some(default_provider) = merged.default_provider {
             config.default_provider = default_provider;
         }
+        config.provider.name = config.default_provider.clone();
+        if let Some(provider_mode) = merged.provider_mode {
+            config.provider.mode = provider_mode;
+        }
+        if let Some(provider_base_url) = merged.provider_base_url {
+            config.provider.base_url = Some(provider_base_url);
+        }
+        if let Some(provider_api_key_env) = merged.provider_api_key_env {
+            config.provider.api_key_env = provider_api_key_env;
+        }
+        if let Some(provider_model) = merged.provider_model {
+            config.provider.model = provider_model;
+        }
         if let Some(default_timeout_secs) = merged.default_timeout_secs {
             config.default_timeout_secs = default_timeout_secs;
         }
@@ -163,6 +234,12 @@ impl ConfigLoader {
             state_dir: env::var_os("RECODE_STATE_DIR").map(PathBuf::from),
             log_level: env::var("RECODE_LOG_LEVEL").ok(),
             default_provider: env::var("RECODE_DEFAULT_PROVIDER").ok(),
+            provider_mode: env::var("RECODE_PROVIDER_MODE")
+                .ok()
+                .and_then(|raw| ProviderMode::parse(&raw)),
+            provider_base_url: env::var("RECODE_PROVIDER_BASE_URL").ok(),
+            provider_api_key_env: env::var("RECODE_PROVIDER_API_KEY_ENV").ok(),
+            provider_model: env::var("RECODE_PROVIDER_MODEL").ok(),
             default_timeout_secs: env::var("RECODE_DEFAULT_TIMEOUT_SECS")
                 .ok()
                 .and_then(|raw| raw.parse().ok()),
@@ -202,6 +279,10 @@ mod tests {
 state_dir = ".custom/state"
 log_level = "debug"
 default_provider = "codex"
+provider_mode = "codex"
+provider_base_url = "https://api.openai.com/v1"
+provider_api_key_env = "OPENAI_API_KEY"
+provider_model = "codex-mini-latest"
 default_timeout_secs = 42
 default_max_attempts = 3
 approval_policy = "on_failure"
@@ -215,6 +296,14 @@ approval_policy = "on_failure"
         assert_eq!(config.state_dir, PathBuf::from(".custom/state"));
         assert_eq!(config.log_level, "debug");
         assert_eq!(config.default_provider, "codex");
+        assert_eq!(config.provider.name, "codex");
+        assert_eq!(config.provider.mode, ProviderMode::Codex);
+        assert_eq!(
+            config.provider.base_url.as_deref(),
+            Some("https://api.openai.com/v1")
+        );
+        assert_eq!(config.provider.api_key_env, "OPENAI_API_KEY");
+        assert_eq!(config.provider.model, "codex-mini-latest");
         assert_eq!(config.default_timeout_secs, 42);
         assert_eq!(config.default_max_attempts, 3);
         assert_eq!(config.approval_policy, ApprovalPolicy::OnFailure);
@@ -242,6 +331,10 @@ approval_policy = "manual"
                 state_dir: Some(PathBuf::from(".env/state")),
                 log_level: Some("warn".into()),
                 default_provider: None,
+                provider_mode: Some(ProviderMode::Codex),
+                provider_base_url: Some("https://example.invalid/v1".into()),
+                provider_api_key_env: Some("CODEX_API_KEY".into()),
+                provider_model: Some("codex-test".into()),
                 default_timeout_secs: Some(90),
                 default_max_attempts: Some(4),
                 approval_policy: Some(ApprovalPolicy::Never),
@@ -253,6 +346,14 @@ approval_policy = "manual"
         assert_eq!(config.state_dir, PathBuf::from(".env/state"));
         assert_eq!(config.log_level, "warn");
         assert_eq!(config.default_provider, "file-provider");
+        assert_eq!(config.provider.name, "file-provider");
+        assert_eq!(config.provider.mode, ProviderMode::Codex);
+        assert_eq!(
+            config.provider.base_url.as_deref(),
+            Some("https://example.invalid/v1")
+        );
+        assert_eq!(config.provider.api_key_env, "CODEX_API_KEY");
+        assert_eq!(config.provider.model, "codex-test");
         assert_eq!(config.default_timeout_secs, 90);
         assert_eq!(config.default_max_attempts, 4);
         assert_eq!(config.approval_policy, ApprovalPolicy::Never);
@@ -279,6 +380,10 @@ approval_policy = "manual"
                 state_dir: Some(PathBuf::from(".env/state")),
                 log_level: Some("warn".into()),
                 default_provider: Some("env-provider".into()),
+                provider_mode: Some(ProviderMode::Codex),
+                provider_base_url: Some("https://env.invalid/v1".into()),
+                provider_api_key_env: Some("ENV_API_KEY".into()),
+                provider_model: Some("env-model".into()),
                 default_timeout_secs: Some(90),
                 default_max_attempts: Some(4),
                 approval_policy: Some(ApprovalPolicy::Never),
@@ -292,6 +397,10 @@ approval_policy = "manual"
                     state_dir: Some(PathBuf::from(".cli/state")),
                     log_level: None,
                     default_provider: Some("cli-provider".into()),
+                    provider_mode: Some(ProviderMode::OpenAiCompatible),
+                    provider_base_url: Some("https://cli.invalid/v1".into()),
+                    provider_api_key_env: Some("CLI_API_KEY".into()),
+                    provider_model: Some("cli-model".into()),
                     default_timeout_secs: Some(120),
                     default_max_attempts: Some(5),
                     approval_policy: Some(ApprovalPolicy::Manual),
@@ -302,6 +411,14 @@ approval_policy = "manual"
         assert_eq!(config.state_dir, PathBuf::from(".cli/state"));
         assert_eq!(config.log_level, "warn");
         assert_eq!(config.default_provider, "cli-provider");
+        assert_eq!(config.provider.name, "cli-provider");
+        assert_eq!(config.provider.mode, ProviderMode::OpenAiCompatible);
+        assert_eq!(
+            config.provider.base_url.as_deref(),
+            Some("https://cli.invalid/v1")
+        );
+        assert_eq!(config.provider.api_key_env, "CLI_API_KEY");
+        assert_eq!(config.provider.model, "cli-model");
         assert_eq!(config.default_timeout_secs, 120);
         assert_eq!(config.default_max_attempts, 5);
         assert_eq!(config.approval_policy, ApprovalPolicy::Manual);
