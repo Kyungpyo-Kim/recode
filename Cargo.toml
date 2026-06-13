@@ -17,7 +17,11 @@ repository = "https://github.com/Kyungpyo-Kim/recode"
 anyhow = "1"
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5", features = ["derive"] }
+crossterm = "0.29"
+ratatui = "0.29"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
+toml = "0.9"
 uuid = { version = "1", features = ["serde", "v4"] }
+wait-timeout = "0.2"

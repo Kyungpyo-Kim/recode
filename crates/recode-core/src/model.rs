@@ -9,11 +9,17 @@ pub struct SessionRecord {
     pub status: SessionStatus,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    #[serde(default)]
+    pub policy: ExecutionPolicy,
     pub tasks: Vec<TaskRecord>,
 }
 
 impl SessionRecord {
     pub fn new(name: impl Into<String>) -> Self {
+        Self::new_with_policy(name, ExecutionPolicy::default())
+    }
+
+    pub fn new_with_policy(name: impl Into<String>, policy: ExecutionPolicy) -> Self {
         let now = Utc::now();
         Self {
             id: Uuid::new_v4(),
@@ -21,12 +27,32 @@ impl SessionRecord {
             status: SessionStatus::Created,
             created_at: now,
             updated_at: now,
+            policy,
             tasks: Vec::new(),
         }
     }
 
     pub fn touch(&mut self) {
         self.updated_at = Utc::now();
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ApprovalPolicy {
+    Manual,
+    OnFailure,
+    Never,
+}
+
+impl ApprovalPolicy {
+    pub fn parse(raw: &str) -> Option<Self> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "manual" => Some(Self::Manual),
+            "on_failure" | "on-failure" => Some(Self::OnFailure),
+            "never" => Some(Self::Never),
+            _ => None,
+        }
     }
 }
 
@@ -42,6 +68,52 @@ pub enum SessionStatus {
     Cancelled,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExecutionPolicy {
+    pub retry: RetryPolicy,
+    pub timeout: TimeoutPolicy,
+    #[serde(default = "default_approval_policy")]
+    pub approval: ApprovalPolicy,
+}
+
+impl Default for ExecutionPolicy {
+    fn default() -> Self {
+        Self {
+            retry: RetryPolicy::default(),
+            timeout: TimeoutPolicy::default(),
+            approval: default_approval_policy(),
+        }
+    }
+}
+
+fn default_approval_policy() -> ApprovalPolicy {
+    ApprovalPolicy::Manual
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RetryPolicy {
+    pub max_attempts: u32,
+}
+
+impl Default for RetryPolicy {
+    fn default() -> Self {
+        Self { max_attempts: 1 }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TimeoutPolicy {
+    pub step_timeout_secs: u64,
+}
+
+impl Default for TimeoutPolicy {
+    fn default() -> Self {
+        Self {
+            step_timeout_secs: 300,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskRecord {
     pub id: Uuid,
@@ -53,7 +125,7 @@ pub struct TaskRecord {
 }
 
 impl TaskRecord {
-    pub fn new(title: impl Into<String>, step_titles: Vec<String>) -> Self {
+    pub fn new(title: impl Into<String>, steps: Vec<StepRecord>) -> Self {
         let now = Utc::now();
         Self {
             id: Uuid::new_v4(),
@@ -61,7 +133,7 @@ impl TaskRecord {
             status: TaskStatus::Planned,
             created_at: now,
             updated_at: now,
-            steps: step_titles.into_iter().map(StepRecord::new).collect(),
+            steps,
         }
     }
 
@@ -90,15 +162,25 @@ pub struct StepRecord {
     pub id: Uuid,
     pub title: String,
     pub status: StepStatus,
+    #[serde(default)]
+    pub requires_approval: bool,
+    #[serde(default)]
+    pub approval_granted: bool,
     pub attempts: Vec<AttemptRecord>,
 }
 
 impl StepRecord {
     pub fn new(title: impl Into<String>) -> Self {
+        Self::new_with_approval(title, false)
+    }
+
+    pub fn new_with_approval(title: impl Into<String>, requires_approval: bool) -> Self {
         Self {
             id: Uuid::new_v4(),
             title: title.into(),
             status: StepStatus::Planned,
+            requires_approval,
+            approval_granted: false,
             attempts: Vec::new(),
         }
     }

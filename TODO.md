@@ -7,4 +7,26 @@
 - [x] Implement execution engine with TDD-first coverage
 - [x] Add GitHub Actions CI/CD workflows
 - [x] Verify fmt, clippy, and tests
-- [ ] Summarize changes and ask for review before cleanup
+- [x] Add minimal configuration system with ADR and precedence rules
+- [x] Wire CLI to config resolution
+- [x] Verify fmt, clippy, and tests for config changes
+- [x] Expose task creation through CLI
+- [x] Expose run-next step execution through CLI
+- [x] Update README for new CLI surface
+- [x] Verify fmt, clippy, and tests
+- [x] Add targeted task execution and session run-all
+- [x] Update README for multi-task flow
+- [x] Bring CLI and TUI to the same functional milestone baseline
+- [x] Add first real Ratatui session/task status screen
+- [x] Surface approval/retry/timeout state in TUI
+- [x] Keep matching CLI commands for every TUI milestone
+- [x] Replace the TUI built-in success stub with a shared executor bridge
+- [x] Unify CLI and TUI on the shared executor bridge
+- [x] Add real timeout enforcement for shell-backed steps
+- [x] Verify fmt, clippy, and tests
+- [x] Summarize changes and ask for review before cleanup
+- [x] Add minimal shared executor options for streaming, PTY preference, and cancellation
+- [x] Thread the executor options through the CLI and keep TUI on the same bridge
+- [x] Update README and tests for the new execution slice
+- [ ] Add true async run lifecycle so TUI can cancel in-flight commands without blocking
+- [ ] Persist streamed output into session logs instead of only surfacing terminal inheritance

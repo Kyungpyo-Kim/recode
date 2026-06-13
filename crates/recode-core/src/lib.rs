@@ -1,10 +1,16 @@
+pub mod config;
 pub mod engine;
+pub mod executor;
 pub mod model;
 pub mod storage;
 
-pub use engine::{AttemptOutcome, EngineError, RunStepResult, StepRunner, WorkflowEngine};
+pub use config::{ConfigLoader, DEFAULT_LOG_LEVEL, PartialConfig, RecodeConfig};
+pub use engine::{
+    AttemptOutcome, EngineError, RunAllResult, RunStepResult, StepRunner, StepSpec, WorkflowEngine,
+};
+pub use executor::{ExecutorBridge, ExecutorOptions};
 pub use model::{
-    AttemptRecord, AttemptStatus, SessionRecord, SessionStatus, StepRecord, StepStatus, TaskRecord,
-    TaskStatus,
+    ApprovalPolicy, AttemptRecord, AttemptStatus, ExecutionPolicy, RetryPolicy, SessionRecord,
+    SessionStatus, StepRecord, StepStatus, TaskRecord, TaskStatus, TimeoutPolicy,
 };
 pub use storage::{DEFAULT_STATE_DIR, SessionStore};

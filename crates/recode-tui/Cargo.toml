@@ -7,4 +7,10 @@ authors.workspace = true
 repository.workspace = true
 
 [dependencies]
+anyhow.workspace = true
+clap.workspace = true
+crossterm.workspace = true
+ratatui.workspace = true
+recode-core = { path = "../recode-core" }
 serde_json.workspace = true
+uuid.workspace = true
