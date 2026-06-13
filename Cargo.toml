@@ -1,0 +1,23 @@
+[workspace]
+members = [
+  "crates/recode-core",
+  "crates/recode-cli",
+  "crates/recode-tui",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+authors = ["Kyungpyo"]
+repository = "https://github.com/Kyungpyo-Kim/recode"
+
+[workspace.dependencies]
+anyhow = "1"
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4.5", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+uuid = { version = "1", features = ["serde", "v4"] }

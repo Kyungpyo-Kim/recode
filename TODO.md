@@ -1,0 +1,10 @@
+- [x] Define MVP bootstrap scope from PRD into a concrete repo skeleton
+- [x] Create Rust workspace with core, CLI, and TUI crates
+- [x] Add shared domain model for session, task, step, attempt, and status
+- [x] Implement minimal JSON CLI commands for version and session init/inspect
+- [x] Verify build/test on the touched parts
+- [x] Add ADR for execution-engine architecture decision
+- [x] Implement execution engine with TDD-first coverage
+- [x] Add GitHub Actions CI/CD workflows
+- [x] Verify fmt, clippy, and tests
+- [ ] Summarize changes and ask for review before cleanup

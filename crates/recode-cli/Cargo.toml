@@ -1,0 +1,13 @@
+[package]
+name = "recode-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+serde_json.workspace = true
+recode-core = { path = "../recode-core" }
