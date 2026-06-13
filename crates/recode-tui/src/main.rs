@@ -40,6 +40,8 @@ struct Cli {
     approval_policy: Option<String>,
     #[arg(long)]
     dump: bool,
+    #[arg(long)]
+    no_bootstrap: bool,
 }
 
 struct App {
@@ -51,7 +53,7 @@ struct App {
 }
 
 impl App {
-    fn new(store: SessionStore) -> Result<Self> {
+    fn new(store: SessionStore, auto_bootstrap: bool) -> Result<Self> {
         let engine = WorkflowEngine::new(store.clone());
         let mut app = Self {
             engine,
@@ -62,16 +64,25 @@ impl App {
                 "r: refresh, ↑/↓: move, n: run-next, A: run-all, a: approve, q: quit (cmd:/shell:/exec: shared shell bridge; CLI adds --stream/--pty/--cancel-file)",
             ),
         };
-        app.refresh()?;
+        app.refresh(auto_bootstrap)?;
         Ok(app)
     }
 
-    fn refresh(&mut self) -> Result<()> {
+    fn refresh(&mut self, auto_bootstrap: bool) -> Result<()> {
         self.sessions = self.store.list_sessions()?;
+        if self.sessions.is_empty() && auto_bootstrap {
+            let session = self.store.init_session("default")?;
+            self.sessions = vec![session];
+            self.selected = 0;
+            self.status = String::from("Bootstrapped default session");
+            return Ok(());
+        }
+
         if self.sessions.is_empty() {
             self.selected = 0;
-            self.status =
-                String::from("No sessions found. Create one with recode-cli session init.");
+            self.status = String::from(
+                "No sessions found. Re-run without --no-bootstrap to auto-create default session.",
+            );
         } else if self.selected >= self.sessions.len() {
             self.selected = self.sessions.len() - 1;
             self.status = format!("Loaded {} sessions", self.sessions.len());
@@ -169,7 +180,7 @@ fn main() -> Result<()> {
     let store = SessionStore::new(config.state_dir);
 
     if cli.dump {
-        let app = App::new(store)?;
+        let app = App::new(store, !cli.no_bootstrap)?;
         for line in dump_lines(&app) {
             println!("{line}");
         }
@@ -182,7 +193,7 @@ fn main() -> Result<()> {
     let backend = ratatui::backend::CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let result = run_app(&mut terminal, App::new(store));
+    let result = run_app(&mut terminal, App::new(store, !cli.no_bootstrap));
 
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
@@ -204,7 +215,7 @@ fn run_app(terminal: &mut DefaultTerminal, app_result: Result<App>) -> Result<()
                 KeyCode::Down | KeyCode::Char('j') => app.next(),
                 KeyCode::Up | KeyCode::Char('k') => app.previous(),
                 KeyCode::Char('r') => {
-                    if let Err(error) = app.refresh() {
+                    if let Err(error) = app.refresh(false) {
                         app.status = format!("refresh failed: {error}");
                     }
                 }

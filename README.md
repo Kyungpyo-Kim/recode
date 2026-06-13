@@ -139,6 +139,16 @@ For non-interactive checks:
 cargo run -p recode-tui -- --dump
 ```
 
+Opt out of default-session bootstrap:
+
+```bash
+cargo run -p recode-tui -- --no-bootstrap --dump
+```
+
+First-run behavior:
+- if no sessions exist, TUI auto-creates a `default` session
+- use `--no-bootstrap` if you want to inspect an intentionally empty state
+
 ### Configuration model
 
 Recode supports a minimal layered config system with this precedence:
